@@ -1,0 +1,16 @@
+{
+  "name": "civic-compliance-engine",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "npm run dev -w @caiae/api",
+    "dev:web": "npm run dev -w @caiae/web",
+    "dev:worker": "npm run dev -w @caiae/worker",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": { "node": ">=20" }
+}
