@@ -699,6 +699,7 @@ CREATE TABLE IF NOT EXISTS deadline_occurrences (
   cycle_number integer NOT NULL CHECK (cycle_number > 0),
   due_at timestamptz NOT NULL,
   satisfied_at timestamptz NOT NULL,
+  satisfied_by_principal_id uuid NOT NULL REFERENCES principals(id),
   outcome text NOT NULL CHECK (outcome IN ('on_time', 'late')),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
