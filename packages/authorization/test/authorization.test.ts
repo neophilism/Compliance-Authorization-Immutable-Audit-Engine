@@ -457,3 +457,46 @@ test("emergency path requires a bounded validity and review window", async () =>
     await f.pool.end();
   }
 });
+
+
+test("late emergency review cannot restore authority after the deadline", async () => {
+  if (!process.env.DATABASE_URL) return;
+
+  const f = await fixture();
+  try {
+    const now = Date.now();
+    const record = await f.service.request({
+      organizationId: f.organizationId,
+      resourceId: f.resourceId,
+      authorizationType: "late-review-test",
+      requestedByPrincipalId: f.requesterId,
+      emergency: true,
+      emergencyReviewDueAt: new Date(now + 60_000).toISOString(),
+      validUntil: new Date(now + 120_000).toISOString(),
+      eligibleApproverPrincipalIds: [f.approver1Id],
+    });
+
+    await f.pool.query(
+      `UPDATE authorizations
+       SET emergency_review_due_at = $2
+       WHERE id = $1`,
+      [
+        record.authorization.id,
+        new Date(Date.now() - 1_000).toISOString(),
+      ],
+    );
+
+    await assert.rejects(
+      f.service.recordDecision({
+        authorizationId: record.authorization.id,
+        principalId: f.approver1Id,
+        decision: "approve",
+      }),
+      (error: unknown) =>
+        error instanceof AuthorizationError &&
+        error.code === "invalid_state",
+    );
+  } finally {
+    await f.pool.end();
+  }
+});
