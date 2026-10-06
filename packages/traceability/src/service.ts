@@ -466,7 +466,11 @@ export class TraceabilityService {
          FROM rule_sets
          WHERE organization_id = $1
            AND key = $2
-           AND status = 'active'
+           AND status IN (
+             'active',
+             'superseded',
+             'retired'
+           )
            AND (
              effective_from IS NULL
              OR effective_from <= $3
@@ -536,11 +540,11 @@ export class TraceabilityService {
     }
 
     if (
-      ruleSet.status !== "active"
+      ruleSet.status === "draft"
     ) {
       throw new TraceabilityError(
         "invalid_state",
-        "registered ruleset must be active for evaluation",
+        "draft ruleset versions cannot be evaluated",
       );
     }
 
