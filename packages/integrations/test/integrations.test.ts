@@ -427,6 +427,15 @@ test("audit outbox fans out subscribed events and webhook delivery is HMAC signe
       "pending",
     );
 
+    await f.pool.query(
+      `UPDATE webhook_deliveries
+       SET next_attempt_at =
+         now() + interval '1 day'
+       WHERE subscription_id <> $1
+         AND status IN ('pending', 'failed')`,
+      [webhook.subscription.id],
+    );
+
     const sweep =
       await f.service.deliverPendingWebhooks(
         10,
@@ -627,15 +636,16 @@ test("resource import is mapping-idempotent, export is portable, and adapters ex
             title: "Adapter Baseline",
             rules: [
               {
-                id: "name-exists",
+                id: "resource-active",
                 title:
-                  "Name exists",
+                  "Resource is active",
                 severity: "low",
                 require: {
                   field:
-                    "resource.name",
+                    "resource.status",
                   operator:
-                    "exists",
+                    "equals",
+                  value: "active",
                 },
               },
             ],
