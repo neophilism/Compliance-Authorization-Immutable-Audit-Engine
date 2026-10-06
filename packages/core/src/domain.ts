@@ -72,17 +72,40 @@ export interface Obligation extends BaseEntity {
   dueAt: ISODateTime | null;
 }
 
+export type AuthorizationStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "revoked"
+  | "expired";
+
+export type AuthorizationDecisionValue = "approve" | "deny";
+
 export interface Authorization extends BaseEntity {
   resourceId: EntityId;
   authorizationType: string;
-  status: "pending" | "approved" | "denied" | "revoked" | "expired";
+  status: AuthorizationStatus;
   requestedByPrincipalId: EntityId | null;
   decidedByPrincipalId: EntityId | null;
   requestedAt: ISODateTime;
   decidedAt: ISODateTime | null;
   validFrom: ISODateTime | null;
   validUntil: ISODateTime | null;
+  scope: JsonObject;
   conditions: JsonObject;
+  approvalQuorum: number;
+  approvalAuthority: string | null;
+  emergency: boolean;
+  emergencyReviewDueAt: ISODateTime | null;
+  emergencyReviewedAt: ISODateTime | null;
+}
+
+export interface AuthorizationDecision extends BaseEntity {
+  authorizationId: EntityId;
+  principalId: EntityId;
+  decision: AuthorizationDecisionValue;
+  rationale: string;
+  decidedAt: ISODateTime;
 }
 
 export interface ExceptionRecord extends BaseEntity {

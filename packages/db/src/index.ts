@@ -3,6 +3,7 @@ export { DomainRepository } from "./repository.js";
 export { runMigrations } from "./migrations.js";
 export {
   AuditLedger,
+  appendAuditEventWithClient,
   canonicalJson,
   hashAuditEvent,
   verifyAuditChain,
