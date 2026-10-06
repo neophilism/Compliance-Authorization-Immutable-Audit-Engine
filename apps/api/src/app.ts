@@ -1006,7 +1006,7 @@ export async function buildApp() {
         query.status !== "active" &&
         query.status !== "inactive"
       ) {
-        throw new Error("status must be active or inactive");
+        throw new AuthorizationError("validation", "status must be active or inactive");
       }
 
       if (
@@ -1014,7 +1014,7 @@ export async function buildApp() {
         query.kind !== "user" &&
         query.kind !== "service"
       ) {
-        throw new Error("kind must be user or service");
+        throw new AuthorizationError("validation", "kind must be user or service");
       }
 
       const values: unknown[] = [organizationId];
