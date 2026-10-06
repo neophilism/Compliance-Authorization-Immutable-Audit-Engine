@@ -28,6 +28,7 @@ export function apiRouteAccess(
 
   if (
     route.path === "/health" ||
+    route.path === "/ready" ||
     route.path === "/openapi.json" ||
     route.path === "/v1/security/bootstrap" ||
     route.path.startsWith("/v1/public/")
@@ -85,7 +86,8 @@ export function findApiRoute(
 }
 
 export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
-  { method: "get", path: "/health", tag: "system", summary: "Health check" },
+  { method: "get", path: "/health", tag: "system", summary: "Process liveness check" },
+  { method: "get", path: "/ready", tag: "system", summary: "Database readiness check" },
   { method: "get", path: "/openapi.json", tag: "system", summary: "OpenAPI document" },
   { method: "post", path: "/v1/organizations", tag: "organizations", summary: "Create organization" },
   { method: "get", path: "/v1/organizations/:id", tag: "organizations", summary: "Get organization" },
