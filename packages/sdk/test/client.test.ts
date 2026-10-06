@@ -370,3 +370,266 @@ test("operator client gets and updates resources with optimistic concurrency", a
     "sdk-resource-update",
   );
 });
+
+
+test("operator client exposes typed exception lifecycle methods", async () => {
+  const calls:
+    Array<{
+      url: string;
+      init?: RequestInit;
+    }> = [];
+  const exceptionId =
+    "33333333-3333-4333-8333-333333333333";
+  const resourceId =
+    "22222222-2222-4222-8222-222222222222";
+  const requestedView = {
+    exception: {
+      id: exceptionId,
+      organizationId:
+        ORG,
+      resourceId,
+      ruleId:
+        "fdea.s4.at-rest-encryption",
+      kind:
+        "waiver",
+      status:
+        "requested",
+      requestedByPrincipalId:
+        "requester-principal",
+      decidedByPrincipalId:
+        null,
+      requestedAt:
+        "2026-10-06T17:00:00.000Z",
+      decidedAt:
+        null,
+      justification:
+        "Temporary migration waiver",
+      validFrom:
+        null,
+      validUntil:
+        "2027-10-06T17:00:00.000Z",
+      scope: {
+        subsystem:
+          "legacy-storage",
+      },
+      conditions: {
+        compensatingControlsRequired:
+          true,
+      },
+      approvalQuorum:
+        2,
+      approvalAuthority:
+        "agency-cio",
+      createdAt:
+        "2026-10-06T17:00:00.000Z",
+      updatedAt:
+        "2026-10-06T17:00:00.000Z",
+      metadata: {},
+    },
+    decisions: [],
+    eligibleApproverPrincipalIds: [
+      "approver-1",
+      "approver-2",
+    ],
+    approvalCount:
+      0,
+  };
+
+  const client =
+    createOperatorClient({
+      baseUrl:
+        "https://engine.example",
+      organizationId:
+        ORG,
+      token:
+        "caiau_operator_secret",
+      transport: {
+        fetchImpl:
+          async (
+            input,
+            init,
+          ) => {
+            const url =
+              String(input);
+            calls.push({
+              url,
+              init,
+            });
+
+            if (
+              url.includes(
+                "/effectiveness",
+              )
+            ) {
+              return new Response(
+                JSON.stringify({
+                  effective:
+                    true,
+                  reason:
+                    "approved",
+                }),
+                {
+                  status:
+                    200,
+                  headers: {
+                    "content-type":
+                      "application/json",
+                  },
+                },
+              );
+            }
+
+            return new Response(
+              JSON.stringify(
+                requestedView,
+              ),
+              {
+                status:
+                  init?.method ===
+                    "POST" &&
+                  url.endsWith(
+                    "/v1/exceptions",
+                  )
+                    ? 201
+                    : 200,
+                headers: {
+                  "content-type":
+                    "application/json",
+                },
+              },
+            );
+          },
+      },
+    });
+
+  const requested =
+    await client.requestException({
+      resourceId,
+      ruleId:
+        "fdea.s4.at-rest-encryption",
+      kind:
+        "waiver",
+      requestedByPrincipalId:
+        "requester-principal",
+      justification:
+        "Temporary migration waiver",
+      validUntil:
+        "2027-10-06T17:00:00.000Z",
+      scope: {
+        subsystem:
+          "legacy-storage",
+      },
+      conditions: {
+        compensatingControlsRequired:
+          true,
+      },
+      approvalQuorum:
+        2,
+      approvalAuthority:
+        "agency-cio",
+      eligibleApproverPrincipalIds: [
+        "approver-1",
+        "approver-2",
+      ],
+      correlationId:
+        "sdk-exception-request",
+    });
+
+  assert.equal(
+    requested.exception.id,
+    exceptionId,
+  );
+
+  await client.getException(
+    exceptionId,
+  );
+  const effectiveness =
+    await client
+      .getExceptionEffectiveness(
+        exceptionId,
+        "2026-10-07T17:00:00.000Z",
+      );
+  assert.equal(
+    effectiveness.effective,
+    true,
+  );
+
+  await client
+    .recordExceptionDecision(
+      exceptionId,
+      {
+        principalId:
+          "approver-1",
+        decision:
+          "approve",
+        rationale:
+          "Controls are sufficient",
+        correlationId:
+          "sdk-exception-decision",
+      },
+    );
+
+  await client.revokeException(
+    exceptionId,
+    {
+      principalId:
+        "approver-1",
+      reason:
+        "Migration completed",
+      correlationId:
+        "sdk-exception-revoke",
+    },
+  );
+
+  assert.equal(
+    calls.length,
+    5,
+  );
+
+  const requestCall =
+    calls[0]!;
+  assert.equal(
+    requestCall.init?.method,
+    "POST",
+  );
+  const requestBody =
+    JSON.parse(
+      String(
+        requestCall.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    requestBody.organizationId,
+    ORG,
+  );
+  assert.equal(
+    requestBody.kind,
+    "waiver",
+  );
+  assert.equal(
+    requestBody.correlationId,
+    "sdk-exception-request",
+  );
+
+  assert.match(
+    calls[2]!.url,
+    /\/effectiveness\?at=2026-10-07T17%3A00%3A00\.000Z$/,
+  );
+  assert.equal(
+    calls[3]!.init?.method,
+    "POST",
+  );
+  assert.match(
+    calls[3]!.url,
+    /\/decisions$/,
+  );
+  assert.equal(
+    calls[4]!.init?.method,
+    "POST",
+  );
+  assert.match(
+    calls[4]!.url,
+    /\/revoke$/,
+  );
+});
