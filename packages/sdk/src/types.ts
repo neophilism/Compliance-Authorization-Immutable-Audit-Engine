@@ -2,6 +2,9 @@ import type {
   Authorization,
   AuthorizationDecision,
   AuthorizationDecisionValue,
+  Deadline,
+  DeadlineOccurrence,
+  DeadlineStatus,
   ExceptionDecision,
   ExceptionDecisionValue,
   ExceptionKind,
@@ -243,6 +246,62 @@ export type ExceptionEffectiveness =
         | "validity_expired";
     };
 
+export type CreateDeadlineInput = {
+  resourceId?: string | null;
+  subjectType: string;
+  subjectId: string;
+  deadlineType: string;
+  createdByPrincipalId?: string | null;
+  dueAt?: string;
+  anchorAt?: string;
+  dueAfterSeconds?: number;
+  warningWindowSeconds?: number;
+  gracePeriodSeconds?: number;
+  recurrenceIntervalSeconds?: number | null;
+  recurrenceEndAt?: string | null;
+  maxOccurrences?: number | null;
+  escalationAfterSeconds?: number[];
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type SatisfyDeadlineInput = {
+  principalId: string;
+  satisfiedAt?: string;
+  correlationId?: string | null;
+};
+
+export type CancelDeadlineInput = {
+  principalId: string;
+  reason: string;
+  correlationId?: string | null;
+};
+
+export type DeadlineClockState = {
+  status: Exclude<
+    DeadlineStatus,
+    "satisfied" | "cancelled"
+  >;
+  escalationLevel: number;
+  warningAt: string;
+  dueAt: string;
+  overdueAt: string;
+};
+
+export type DeadlineStatusSnapshot = {
+  status: DeadlineStatus;
+  escalationLevel: number;
+  warningAt: string;
+  dueAt: string;
+  overdueAt: string;
+};
+
+export type DeadlineView = {
+  deadline: Deadline;
+  clock: DeadlineClockState | null;
+  occurrences: DeadlineOccurrence[];
+};
+
 export type RunCheckInput = {
   resourceId: string;
   requestedByPrincipalId?: string | null;
@@ -315,6 +374,9 @@ export type ComplianceReport = {
 };
 
 export type {
+  Deadline,
+  DeadlineOccurrence,
+  DeadlineStatus,
   DeclarativeRuleSet,
   JsonObject,
   Organization,
