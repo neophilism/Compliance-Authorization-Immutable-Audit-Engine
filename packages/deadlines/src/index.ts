@@ -8,6 +8,7 @@ export type {
   CreateDeadlineInput,
   DeadlineClockState,
   DeadlineErrorCode,
+  DeadlineStatusSnapshot,
   DeadlineSweepResult,
   DeadlineView,
   SatisfyDeadlineInput,
