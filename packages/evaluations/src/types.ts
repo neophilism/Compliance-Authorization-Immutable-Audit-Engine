@@ -28,6 +28,7 @@ export type RunCheckInput = {
   organizationId: string;
   resourceId: string;
   ruleSet: DeclarativeRuleSet | unknown;
+  ruleSetRevisionId?: string | null;
   requestedByPrincipalId?: string | null;
   facts?: JsonObject;
   trigger?: CheckTrigger;
@@ -59,6 +60,7 @@ export type CreateScheduleInput = {
   resourceId?: string | null;
   resourceType?: string | null;
   ruleSet: DeclarativeRuleSet | unknown;
+  ruleSetRevisionId?: string | null;
   facts?: JsonObject;
   intervalSeconds: number;
   nextRunAt?: string;
