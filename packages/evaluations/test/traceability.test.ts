@@ -176,7 +176,11 @@ test("checks bind registered versions while preserving exact snapshots and ad-ho
     );
     assert.deepEqual(
       traced.check.ruleSetSnapshot,
-      registered.definition,
+      JSON.parse(
+        JSON.stringify(
+          registered.definition,
+        ),
+      ),
     );
 
     const adHoc =
