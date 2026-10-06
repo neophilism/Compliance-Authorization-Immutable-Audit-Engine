@@ -40,6 +40,7 @@ export const STANDARD_ROLE_TEMPLATES = {
       "remediations.*",
       "certifications.read",
       "reports.read",
+      "traceability.*",
     ],
   },
   reviewer: {
@@ -54,6 +55,7 @@ export const STANDARD_ROLE_TEMPLATES = {
       "remediations.*",
       "certifications.*",
       "reports.read",
+      "traceability.read",
     ],
   },
   publisher: {
@@ -65,6 +67,7 @@ export const STANDARD_ROLE_TEMPLATES = {
       "certifications.read",
       "reports.read",
       "publication.*",
+      "traceability.read",
     ],
   },
   auditor: {
@@ -83,6 +86,7 @@ export const STANDARD_ROLE_TEMPLATES = {
       "certifications.read",
       "reports.read",
       "publication.read",
+      "traceability.read",
     ],
   },
 } as const;
