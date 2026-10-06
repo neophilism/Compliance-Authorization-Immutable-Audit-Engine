@@ -8,9 +8,18 @@ The complete route inventory is available from:
 GET /openapi.json
 ```
 
+## Authentication boundary
+
+PR 16 keeps machine integration authentication separate from human/operator authentication.
+
+- control-plane integration administration uses an authenticated `caiau_...` operator with the required `integration-admin.*` permission;
+- execution routes under the authenticated integration API use `caiae_...` service credentials and service scopes.
+
+An operator token cannot be substituted for a service token, and a service token cannot authenticate operator routes.
+
 ## Create a service credential
 
-Control-plane endpoint:
+Operator-authenticated control-plane endpoint:
 
 ```
 POST /v1/integration/service-accounts
