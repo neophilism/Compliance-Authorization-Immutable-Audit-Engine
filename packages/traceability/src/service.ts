@@ -497,7 +497,7 @@ export class TraceabilityService {
     ) {
       throw new TraceabilityError(
         "not_found",
-        "no active ruleset version is effective at the requested time",
+        "no registered ruleset version is effective at the requested time",
       );
     }
 
@@ -506,7 +506,7 @@ export class TraceabilityService {
     ) {
       throw new TraceabilityError(
         "conflict",
-        "multiple active ruleset versions overlap at the requested time",
+        "multiple registered ruleset versions overlap at the requested time",
       );
     }
 
@@ -612,13 +612,13 @@ export class TraceabilityService {
       );
 
       const effectiveFrom =
-        input.effectiveFrom ===
-          undefined
+        input.effectiveFrom === undefined ||
+        input.effectiveFrom === null
           ? (
               current.effectiveFrom ??
               this.now().toISOString()
             )
-          : normalizeOptionalDate(
+          : normalizeRequiredDate(
               input.effectiveFrom,
               "effectiveFrom",
             );
@@ -843,10 +843,10 @@ export class TraceabilityService {
       const retiredAt =
         this.now().toISOString();
       const effectiveTo =
-        input.effectiveTo ===
-          undefined
+        input.effectiveTo === undefined ||
+        input.effectiveTo === null
           ? retiredAt
-          : normalizeOptionalDate(
+          : normalizeRequiredDate(
               input.effectiveTo,
               "effectiveTo",
             );
