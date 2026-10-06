@@ -32,7 +32,10 @@ import {
 import {
   IntegrationError,
   IntegrationService,
+  apiRouteAccess,
+  apiRoutePermission,
   buildOpenApiDocument,
+  findApiRoute,
   type AuthenticatedService,
   type ServiceScope,
 } from "@caiae/integrations";
@@ -45,12 +48,143 @@ import {
   PublicationError,
   PublicationService,
 } from "@caiae/publication";
+import {
+  SecurityError,
+  SecurityService,
+  type AuthenticatedOperator,
+} from "@caiae/security";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} is required`);
   }
   return value.trim();
+}
+
+type BuildAppOptions = {
+  securityMode?: "enforce" | "legacy";
+  bootstrapSecret?: string | null;
+};
+
+const ACTOR_FIELDS = [
+  "principalId",
+  "requestedByPrincipalId",
+  "issuedByPrincipalId",
+  "createdByPrincipalId",
+  "submittedByPrincipalId",
+] as const;
+
+function operatorBearerToken(
+  authorization: unknown,
+): string {
+  if (typeof authorization !== "string") {
+    throw new SecurityError(
+      "unauthorized",
+      "Bearer operator credential is required",
+    );
+  }
+
+  const match = authorization.match(
+    /^Bearer\s+(.+)$/i,
+  );
+
+  if (!match?.[1]) {
+    throw new SecurityError(
+      "unauthorized",
+      "Bearer operator credential is required",
+    );
+  }
+
+  return match[1].trim();
+}
+
+function securityHeaderString(
+  value: unknown,
+  field: string,
+): string {
+  const raw =
+    Array.isArray(value)
+      ? value[0]
+      : value;
+
+  if (
+    typeof raw !== "string" ||
+    raw.trim() === ""
+  ) {
+    throw new SecurityError(
+      "validation",
+      `${field} is required`,
+    );
+  }
+
+  return raw.trim();
+}
+
+function securityStringArray(
+  value: unknown,
+  field: string,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new SecurityError(
+      "validation",
+      `${field} must be an array of strings`,
+    );
+  }
+
+  return value.map((item, index) => {
+    if (
+      typeof item !== "string" ||
+      item.trim() === ""
+    ) {
+      throw new SecurityError(
+        "validation",
+        `${field}[${index}] must be a non-empty string`,
+      );
+    }
+    return item.trim();
+  });
+}
+
+function securityOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return value;
+  }
+  if (
+    typeof value !== "string" ||
+    value.trim() === ""
+  ) {
+    throw new SecurityError(
+      "validation",
+      `${field} must be a non-empty string or null`,
+    );
+  }
+  return value.trim();
+}
+
+function securityOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new SecurityError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
 }
 
 function optionalString(
@@ -643,6 +777,25 @@ function publicationOptionalObject(
   return value as Record<string, any>;
 }
 
+function securityHttpStatus(
+  error: SecurityError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "unauthorized":
+      return 401;
+    case "forbidden":
+      return 403;
+    case "not_found":
+      return 404;
+    case "conflict":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 function certificationHttpStatus(
   error: CertificationError,
 ): number {
@@ -822,7 +975,9 @@ function integrationIdempotencyKey(
   return raw.trim();
 }
 
-export async function buildApp() {
+export async function buildApp(
+  options: BuildAppOptions = {},
+) {
   const app = Fastify({ logger: true });
   const pool = createPool();
   await runMigrations(pool);
@@ -836,9 +991,227 @@ export async function buildApp() {
   const certifications = new CertificationService(pool);
   const reporting = new ReportingService(pool);
   const publication = new PublicationService(pool);
+  const security = new SecurityService(pool, {
+    bootstrapSecret:
+      options.bootstrapSecret,
+  });
   const integrations = new IntegrationService(pool);
+  const securityMode =
+    options.securityMode ??
+    (
+      process.env.CAIAE_API_SECURITY_MODE ===
+        "legacy"
+        ? "legacy"
+        : "enforce"
+    );
 
   await app.register(cors, { origin: true });
+
+  async function lookupOrganizationById(
+    table: string,
+    id: string,
+  ): Promise<string | null> {
+    const allowed = new Set([
+      "policies",
+      "resources",
+      "authorizations",
+      "exceptions",
+      "evidence",
+      "evidence_attestations",
+      "deadlines",
+      "checks",
+      "evaluation_schedules",
+      "findings",
+      "remediations",
+      "certifications",
+      "publication_controls",
+      "api_credentials",
+      "operator_credentials",
+    ]);
+
+    if (!allowed.has(table)) {
+      throw new Error(
+        "unsupported organization lookup table",
+      );
+    }
+
+    const result = await pool.query(
+      `SELECT organization_id
+       FROM ${table}
+       WHERE id = $1`,
+      [id],
+    );
+
+    return (
+      result.rows[0]
+        ?.organization_id ??
+      null
+    );
+  }
+
+  async function resolveRequestOrganization(
+    routePath: string,
+    params: Record<string, unknown>,
+    body: Record<string, unknown>,
+  ): Promise<string | null> {
+    const direct =
+      typeof params.organizationId ===
+        "string"
+        ? params.organizationId
+        : (
+            typeof body.organizationId ===
+              "string"
+              ? body.organizationId
+              : null
+          );
+
+    if (direct) return direct;
+
+    if (
+      routePath ===
+        "/v1/organizations/:id" &&
+      typeof params.id === "string"
+    ) {
+      return params.id;
+    }
+
+    if (
+      typeof params.id !== "string"
+    ) {
+      return null;
+    }
+
+    const id = params.id;
+    const prefixes: Array<
+      [string, string]
+    > = [
+      ["/v1/policies/", "policies"],
+      ["/v1/resources/", "resources"],
+      ["/v1/authorizations/", "authorizations"],
+      ["/v1/exceptions/", "exceptions"],
+      ["/v1/evidence-attestations/", "evidence_attestations"],
+      ["/v1/evidence/", "evidence"],
+      ["/v1/deadlines/", "deadlines"],
+      ["/v1/checks/", "checks"],
+      ["/v1/evaluation-schedules/", "evaluation_schedules"],
+      ["/v1/findings/", "findings"],
+      ["/v1/remediations/", "remediations"],
+      ["/v1/certifications/", "certifications"],
+      ["/v1/publications/", "publication_controls"],
+      ["/v1/integration/api-credentials/", "api_credentials"],
+      ["/v1/security/operator-credentials/", "operator_credentials"],
+    ];
+
+    for (
+      const [prefix, table] of prefixes
+    ) {
+      if (
+        routePath.startsWith(prefix)
+      ) {
+        return lookupOrganizationById(
+          table,
+          id,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  app.addHook(
+    "preHandler",
+    async (request) => {
+      if (
+        securityMode === "legacy"
+      ) {
+        return;
+      }
+
+      const routePath =
+        request.routeOptions.url;
+      const route = findApiRoute(
+        request.method,
+        routePath,
+      );
+
+      if (!route) return;
+
+      const access =
+        apiRouteAccess(route);
+
+      if (
+        access !== "operator"
+      ) {
+        return;
+      }
+
+      const auth =
+        await security.authenticate(
+          operatorBearerToken(
+            request.headers
+              .authorization,
+          ),
+        );
+
+      security.assertPermission(
+        auth,
+        apiRoutePermission(route),
+      );
+
+      const params =
+        (
+          request.params ??
+          {}
+        ) as Record<
+          string,
+          unknown
+        >;
+      const body =
+        (
+          request.body ??
+          {}
+        ) as Record<
+          string,
+          unknown
+        >;
+      const organizationId =
+        await resolveRequestOrganization(
+          routePath,
+          params,
+          body,
+        );
+
+      if (organizationId !== null) {
+        security.assertOrganization(
+          auth,
+          organizationId,
+        );
+      }
+
+      for (
+        const field of
+        ACTOR_FIELDS
+      ) {
+        const value =
+          body[field];
+
+        if (
+          typeof value ===
+            "string"
+        ) {
+          security.assertActor(
+            auth,
+            value,
+            field,
+          );
+        }
+      }
+
+      (
+        request as any
+      ).operatorAuth = auth;
+    },
+  );
 
   app.addHook("onClose", async () => {
     await pool.end();
@@ -935,6 +1308,15 @@ export async function buildApp() {
         });
     }
 
+    if (error instanceof SecurityError) {
+      return reply
+        .code(securityHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
     const message = errorMessage(error);
 
     if (message.endsWith(" is required")) {
@@ -955,6 +1337,27 @@ export async function buildApp() {
     buildOpenApiDocument(),
   );
 
+  function operatorAuth(
+    request: unknown,
+  ): AuthenticatedOperator {
+    const auth =
+      (
+        request as {
+          operatorAuth?:
+            AuthenticatedOperator;
+        }
+      ).operatorAuth;
+
+    if (!auth) {
+      throw new SecurityError(
+        "unauthorized",
+        "operator authentication is required",
+      );
+    }
+
+    return auth;
+  }
+
   async function integrationAuth(
     request: { headers: Record<string, unknown> },
     scopes: ServiceScope[],
@@ -966,6 +1369,200 @@ export async function buildApp() {
       scopes,
     );
   }
+
+  app.post(
+    "/v1/security/bootstrap",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const issued =
+        await security.bootstrap(
+          securityHeaderString(
+            request.headers[
+              "x-caiae-bootstrap-secret"
+            ],
+            "X-CAIAE-Bootstrap-Secret",
+          ),
+          {
+            organizationId:
+              requiredString(
+                body.organizationId,
+                "organizationId",
+              ),
+            principalId:
+              requiredString(
+                body.principalId,
+                "principalId",
+              ),
+            credentialName:
+              typeof body.credentialName ===
+                "string"
+                ? body.credentialName
+                : undefined,
+          },
+        );
+
+      return reply
+        .code(201)
+        .send(issued);
+    },
+  );
+
+  app.get(
+    "/v1/security/me",
+    async (request) =>
+      operatorAuth(request),
+  );
+
+  app.get(
+    "/v1/security/roles",
+    async (request) =>
+      security.listRoles(
+        operatorAuth(request),
+      ),
+  );
+
+  app.post(
+    "/v1/security/roles",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const role =
+        await security.createRole(
+          operatorAuth(request),
+          {
+            organizationId:
+              requiredString(
+                body.organizationId,
+                "organizationId",
+              ),
+            key: requiredString(
+              body.key,
+              "key",
+            ),
+            name: requiredString(
+              body.name,
+              "name",
+            ),
+            permissions:
+              securityStringArray(
+                body.permissions,
+                "permissions",
+              ),
+            metadata:
+              securityOptionalObject(
+                body.metadata,
+                "metadata",
+              ),
+          },
+        );
+
+      return reply
+        .code(201)
+        .send(role);
+    },
+  );
+
+  app.post(
+    "/v1/security/role-assignments",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const assignment =
+        await security.assignRole(
+          operatorAuth(request),
+          {
+            organizationId:
+              requiredString(
+                body.organizationId,
+                "organizationId",
+              ),
+            principalId:
+              requiredString(
+                body.principalId,
+                "principalId",
+              ),
+            roleId:
+              requiredString(
+                body.roleId,
+                "roleId",
+              ),
+          },
+        );
+
+      return reply
+        .code(201)
+        .send(assignment);
+    },
+  );
+
+  app.get(
+    "/v1/security/operator-credentials",
+    async (request) =>
+      security.listCredentials(
+        operatorAuth(request),
+      ),
+  );
+
+  app.post(
+    "/v1/security/operator-credentials",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const issued =
+        await security.issueCredential(
+          operatorAuth(request),
+          {
+            organizationId:
+              requiredString(
+                body.organizationId,
+                "organizationId",
+              ),
+            principalId:
+              requiredString(
+                body.principalId,
+                "principalId",
+              ),
+            name: requiredString(
+              body.name,
+              "name",
+            ),
+            expiresAt:
+              securityOptionalNullableString(
+                body.expiresAt,
+                "expiresAt",
+              ),
+            metadata:
+              securityOptionalObject(
+                body.metadata,
+                "metadata",
+              ),
+          },
+        );
+
+      return reply
+        .code(201)
+        .send(issued);
+    },
+  );
+
+  app.post(
+    "/v1/security/operator-credentials/:id/revoke",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return security.revokeCredential(
+        operatorAuth(request),
+        {
+          credentialId: id,
+          reason: requiredString(
+            body.reason,
+            "reason",
+          ),
+        },
+      );
+    },
+  );
 
   app.post("/v1/organizations", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
