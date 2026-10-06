@@ -12,9 +12,9 @@
     "dev:worker": "npm run dev -w @caiae/worker",
     "db:migrate": "npm run migrate -w @caiae/db",
     "db:seed": "npm run seed -w @caiae/db",
-    "build": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/evaluations && npm run build -w @caiae/api && npm run build -w @caiae/worker && npm run build -w @caiae/web",
+    "build": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/evaluations && npm run build -w @caiae/api && npm run build -w @caiae/worker && npm run build -w @caiae/web",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/evaluations && npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/evaluations && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "audit:verify": "npm run audit:verify -w @caiae/db --",
     "rules:evaluate": "npm run evaluate -w @caiae/rules --"
