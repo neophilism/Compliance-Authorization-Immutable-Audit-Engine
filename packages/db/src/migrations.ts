@@ -142,7 +142,6 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
-}
 
   if (!versions.has("0010_api_integration_layer")) {
     await pool.query("BEGIN");
@@ -158,6 +157,7 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+}
 
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
