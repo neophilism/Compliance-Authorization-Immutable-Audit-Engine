@@ -41,6 +41,15 @@ export type ReportCheck = {
   completedAt: string | null;
   ruleSetId: string | null;
   ruleSetVersion: string | null;
+  ruleSetRevisionId: string | null;
+  ruleSetContentHash: string | null;
+  authoritySources: Array<{
+    sourceType: string;
+    citation: string;
+    title: string;
+    relation: string;
+    locator: string | null;
+  }>;
   counts: JsonObject;
   errorMessage: string | null;
 };
