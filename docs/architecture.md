@@ -16,6 +16,7 @@ The core engine remains policy-domain neutral. Bill-specific concepts belong in 
 - **Worker** — scheduled checks, deadlines, escalations, and asynchronous jobs.
 - **Web** — reference administration interface.
 - **Core package** — shared types and domain primitives.
+- **SDK package** — validated thin-app configuration plus public/operator/service HTTP clients; downstream apps use this boundary instead of engine persistence or service internals.
 - **PostgreSQL** — authoritative transactional store.
 
 ## Audit principle
