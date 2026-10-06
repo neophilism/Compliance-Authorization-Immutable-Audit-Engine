@@ -1,5 +1,9 @@
 export { createPool } from "./client.js";
 export { DomainRepository } from "./repository.js";
+export type {
+  UpdateResourceInput,
+  UpdateResourceResult,
+} from "./repository.js";
 export {
   LATEST_SCHEMA_VERSION,
   runMigrations,
