@@ -9,8 +9,8 @@
     "start": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test",
-    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications && npm run build -w @caiae/evaluations",
-    "prestart": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications && npm run build -w @caiae/evaluations"
+    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications && npm run build -w @caiae/evaluations && npm run build -w @caiae/integrations",
+    "prestart": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications && npm run build -w @caiae/evaluations && npm run build -w @caiae/integrations"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
@@ -23,6 +23,7 @@
     "@caiae/exceptions": "*",
     "@caiae/deadlines": "*",
     "@caiae/evaluations": "*",
-    "@caiae/certifications": "*"
+    "@caiae/certifications": "*",
+    "@caiae/integrations": "*"
   }
 }
