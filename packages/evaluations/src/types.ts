@@ -27,7 +27,8 @@ export class EvaluationError extends Error {
 export type RunCheckInput = {
   organizationId: string;
   resourceId: string;
-  ruleSet: DeclarativeRuleSet | unknown;
+  ruleSet?: DeclarativeRuleSet | unknown;
+  registeredRuleSetId?: string | null;
   requestedByPrincipalId?: string | null;
   facts?: JsonObject;
   trigger?: CheckTrigger;
@@ -58,7 +59,8 @@ export type CreateScheduleInput = {
   organizationId: string;
   resourceId?: string | null;
   resourceType?: string | null;
-  ruleSet: DeclarativeRuleSet | unknown;
+  ruleSet?: DeclarativeRuleSet | unknown;
+  registeredRuleSetId?: string | null;
   facts?: JsonObject;
   intervalSeconds: number;
   nextRunAt?: string;
