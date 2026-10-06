@@ -216,14 +216,41 @@ export interface Certification extends BaseEntity {
   conditions: JsonObject;
 }
 
+export type DeadlineStatus =
+  | "scheduled"
+  | "warning"
+  | "due"
+  | "overdue"
+  | "satisfied"
+  | "cancelled";
+
 export interface Deadline extends BaseEntity {
   resourceId: EntityId | null;
   subjectType: string;
   subjectId: EntityId;
   deadlineType: string;
-  status: "scheduled" | "warning" | "due" | "overdue" | "satisfied" | "cancelled";
+  status: DeadlineStatus;
+  createdByPrincipalId: EntityId | null;
+  anchorAt: ISODateTime | null;
+  dueOffsetSeconds: number | null;
   dueAt: ISODateTime;
+  warningWindowSeconds: number;
+  gracePeriodSeconds: number;
+  recurrenceIntervalSeconds: number | null;
+  recurrenceEndAt: ISODateTime | null;
+  maxOccurrences: number | null;
+  cycleNumber: number;
+  escalationAfterSeconds: number[];
+  escalationLevel: number;
   satisfiedAt: ISODateTime | null;
+}
+
+export interface DeadlineOccurrence extends BaseEntity {
+  deadlineId: EntityId;
+  cycleNumber: number;
+  dueAt: ISODateTime;
+  satisfiedAt: ISODateTime;
+  outcome: "on_time" | "late";
 }
 
 export interface AuditEvent {
