@@ -129,6 +129,8 @@ function authorizationHttpStatus(error: AuthorizationError): number {
     case "invalid_state":
     case "duplicate_decision":
       return 409;
+    default:
+      return 500;
   }
 }
 
