@@ -923,10 +923,15 @@ export class IntegrationService
            )
            AND (
              $4::timestamptz IS NULL
-             OR (created_at, id) >
+             OR (
+               date_trunc('milliseconds', created_at),
+               id
+             ) >
                 ($4::timestamptz, $5::uuid)
            )
-         ORDER BY created_at ASC, id ASC
+         ORDER BY
+           date_trunc('milliseconds', created_at) ASC,
+           id ASC
          LIMIT $6`,
         [
           auth.credential.organizationId,
@@ -1266,10 +1271,15 @@ export class IntegrationService
            )
            AND (
              $3::timestamptz IS NULL
-             OR (created_at, id) >
+             OR (
+               date_trunc('milliseconds', created_at),
+               id
+             ) >
                 ($3::timestamptz, $4::uuid)
            )
-         ORDER BY created_at ASC, id ASC
+         ORDER BY
+           date_trunc('milliseconds', created_at) ASC,
+           id ASC
          LIMIT $5`,
         [
           auth.credential.organizationId,
