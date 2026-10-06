@@ -30,6 +30,13 @@ import {
   FindingService,
 } from "@caiae/findings";
 import {
+  IntegrationError,
+  IntegrationService,
+  buildOpenApiDocument,
+  type AuthenticatedService,
+  type ServiceScope,
+} from "@caiae/integrations";
+import {
   ReportingError,
   ReportingService,
   renderComplianceReport,
@@ -589,6 +596,170 @@ function certificationHttpStatus(
   }
 }
 
+function integrationHttpStatus(
+  error: IntegrationError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "unauthorized":
+      return 401;
+    case "forbidden":
+      return 403;
+    case "not_found":
+      return 404;
+    case "conflict":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+function integrationOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new IntegrationError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+function integrationOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return integrationOptionalString(value, field);
+}
+
+function integrationOptionalInteger(
+  value: unknown,
+  field: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed =
+    typeof value === "string"
+      ? Number(value)
+      : value;
+
+  if (!Number.isSafeInteger(parsed)) {
+    throw new IntegrationError(
+      "validation",
+      `${field} must be a safe integer`,
+    );
+  }
+
+  return parsed as number;
+}
+
+function integrationOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new IntegrationError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
+function integrationStringArray(
+  value: unknown,
+  field: string,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new IntegrationError(
+      "validation",
+      `${field} must be an array of strings`,
+    );
+  }
+
+  return value.map((item, index) => {
+    if (typeof item !== "string" || item.trim() === "") {
+      throw new IntegrationError(
+        "validation",
+        `${field}[${index}] must be a non-empty string`,
+      );
+    }
+    return item.trim();
+  });
+}
+
+function integrationOptionalStringArray(
+  value: unknown,
+  field: string,
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  return integrationStringArray(value, field);
+}
+
+function integrationBoolean(
+  value: unknown,
+  field: string,
+): boolean {
+  if (typeof value !== "boolean") {
+    throw new IntegrationError(
+      "validation",
+      `${field} must be a boolean`,
+    );
+  }
+  return value;
+}
+
+function integrationBearerToken(
+  authorization: unknown,
+): string {
+  if (typeof authorization !== "string") {
+    throw new IntegrationError(
+      "unauthorized",
+      "Bearer API credential is required",
+    );
+  }
+
+  const match = authorization.match(
+    /^Bearer\s+(.+)$/i,
+  );
+
+  if (!match?.[1]) {
+    throw new IntegrationError(
+      "unauthorized",
+      "Bearer API credential is required",
+    );
+  }
+
+  return match[1].trim();
+}
+
+function integrationIdempotencyKey(
+  value: unknown,
+): string {
+  const raw =
+    Array.isArray(value)
+      ? value[0]
+      : value;
+
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw new IntegrationError(
+      "validation",
+      "Idempotency-Key header is required",
+    );
+  }
+
+  return raw.trim();
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -602,6 +773,7 @@ export async function buildApp() {
   const findings = new FindingService(pool);
   const certifications = new CertificationService(pool);
   const reporting = new ReportingService(pool);
+  const integrations = new IntegrationService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -682,6 +854,15 @@ export async function buildApp() {
         });
     }
 
+    if (error instanceof IntegrationError) {
+      return reply
+        .code(integrationHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
     const message = errorMessage(error);
 
     if (message.endsWith(" is required")) {
@@ -697,6 +878,22 @@ export async function buildApp() {
     service: "api",
     timestamp: new Date().toISOString(),
   }));
+
+  app.get("/openapi.json", async () =>
+    buildOpenApiDocument(),
+  );
+
+  async function integrationAuth(
+    request: { headers: Record<string, unknown> },
+    scopes: ServiceScope[],
+  ): Promise<AuthenticatedService> {
+    return integrations.authenticate(
+      integrationBearerToken(
+        request.headers.authorization,
+      ),
+      scopes,
+    );
+  }
 
   app.post("/v1/organizations", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
@@ -2238,6 +2435,406 @@ export async function buildApp() {
       return reply
         .type(rendered.mediaType)
         .send(rendered.body);
+    },
+  );
+
+  app.post(
+    "/v1/integration/service-accounts",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await integrations.createServiceAccount({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        displayName: requiredString(
+          body.displayName,
+          "displayName",
+        ),
+        credentialName: requiredString(
+          body.credentialName,
+          "credentialName",
+        ),
+        createdByPrincipalId: requiredString(
+          body.createdByPrincipalId,
+          "createdByPrincipalId",
+        ),
+        scopes: integrationStringArray(
+          body.scopes,
+          "scopes",
+        ) as ServiceScope[],
+        expiresAt: integrationOptionalNullableString(
+          body.expiresAt,
+          "expiresAt",
+        ),
+        externalRef: integrationOptionalNullableString(
+          body.externalRef,
+          "externalRef",
+        ),
+        metadata: integrationOptionalObject(
+          body.metadata,
+          "metadata",
+        ),
+        correlationId: integrationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.get(
+    "/v1/integration/organizations/:organizationId/api-credentials",
+    async (request) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+
+      return integrations.listCredentials(organizationId);
+    },
+  );
+
+  app.post(
+    "/v1/integration/api-credentials/:id/revoke",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return integrations.revokeCredential({
+        credentialId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(
+          body.reason,
+          "reason",
+        ),
+        correlationId: integrationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/integration/resources",
+    async (request, reply) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["resources:write"],
+      );
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = await integrations.createResource(
+        auth,
+        integrationIdempotencyKey(
+          request.headers["idempotency-key"],
+        ),
+        {
+          resourceType: requiredString(
+            body.resourceType,
+            "resourceType",
+          ),
+          name: requiredString(body.name, "name"),
+          externalRef: integrationOptionalNullableString(
+            body.externalRef,
+            "externalRef",
+          ),
+          status:
+            body.status === "active" ||
+            body.status === "inactive" ||
+            body.status === "archived"
+              ? body.status
+              : undefined,
+          attributes: integrationOptionalObject(
+            body.attributes,
+            "attributes",
+          ),
+          metadata: integrationOptionalObject(
+            body.metadata,
+            "metadata",
+          ),
+          correlationId: integrationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+        },
+      );
+
+      return reply
+        .header(
+          "Idempotency-Replayed",
+          String(result.replayed),
+        )
+        .code(result.statusCode)
+        .send(result.body);
+    },
+  );
+
+  app.get(
+    "/v1/integration/resources",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["resources:read"],
+      );
+      const query = request.query as Record<string, unknown>;
+
+      return integrations.listResources(auth, {
+        limit: integrationOptionalInteger(
+          query.limit,
+          "limit",
+        ),
+        cursor: integrationOptionalNullableString(
+          query.cursor,
+          "cursor",
+        ),
+        resourceType: integrationOptionalNullableString(
+          query.resourceType,
+          "resourceType",
+        ),
+        status:
+          query.status === "active" ||
+          query.status === "inactive" ||
+          query.status === "archived"
+            ? query.status
+            : query.status === undefined
+              ? null
+              : query.status as any,
+      });
+    },
+  );
+
+  app.post(
+    "/v1/integration/checks/run",
+    async (request, reply) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["checks:run"],
+      );
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = await integrations.runCheck(
+        auth,
+        integrationIdempotencyKey(
+          request.headers["idempotency-key"],
+        ),
+        {
+          resourceId: requiredString(
+            body.resourceId,
+            "resourceId",
+          ),
+          ruleSet: body.ruleSet,
+          facts: integrationOptionalObject(
+            body.facts,
+            "facts",
+          ),
+          evaluatedAt: integrationOptionalString(
+            body.evaluatedAt,
+            "evaluatedAt",
+          ),
+          metadata: integrationOptionalObject(
+            body.metadata,
+            "metadata",
+          ),
+          correlationId: integrationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+        },
+      );
+
+      return reply
+        .header(
+          "Idempotency-Replayed",
+          String(result.replayed),
+        )
+        .code(result.statusCode)
+        .send(result.body);
+    },
+  );
+
+  app.post(
+    "/v1/integration/webhooks",
+    async (request, reply) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["webhooks:write"],
+      );
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await integrations.createWebhookSubscription(
+        auth,
+        {
+          name: requiredString(body.name, "name"),
+          url: requiredString(body.url, "url"),
+          eventTypes: integrationOptionalStringArray(
+            body.eventTypes,
+            "eventTypes",
+          ),
+          metadata: integrationOptionalObject(
+            body.metadata,
+            "metadata",
+          ),
+          correlationId: integrationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+        },
+      );
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.get(
+    "/v1/integration/webhooks",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["webhooks:read"],
+      );
+
+      return integrations.listWebhookSubscriptions(auth);
+    },
+  );
+
+  app.post(
+    "/v1/integration/webhooks/:id/active",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["webhooks:write"],
+      );
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return integrations.setWebhookActive(
+        auth,
+        id,
+        integrationBoolean(
+          body.active,
+          "active",
+        ),
+        integrationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      );
+    },
+  );
+
+  app.get(
+    "/v1/integration/events",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["events:read"],
+      );
+      const query = request.query as Record<string, unknown>;
+
+      return integrations.listEvents(auth, {
+        limit: integrationOptionalInteger(
+          query.limit,
+          "limit",
+        ),
+        cursor: integrationOptionalNullableString(
+          query.cursor,
+          "cursor",
+        ),
+        eventType: integrationOptionalNullableString(
+          query.eventType,
+          "eventType",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/integration/import/resources",
+    async (request, reply) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["imports:write"],
+      );
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = await integrations.importResources(
+        auth,
+        integrationIdempotencyKey(
+          request.headers["idempotency-key"],
+        ),
+        body as any,
+        integrationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      );
+
+      return reply
+        .header(
+          "Idempotency-Replayed",
+          String(result.replayed),
+        )
+        .code(result.statusCode)
+        .send(result.body);
+    },
+  );
+
+  app.get(
+    "/v1/integration/export/resources",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["exports:read"],
+      );
+
+      return integrations.exportResources(auth);
+    },
+  );
+
+  app.get(
+    "/v1/integration/resources/:resourceId/registry-projection",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["adapters:read"],
+      );
+      const { resourceId } = request.params as {
+        resourceId: string;
+      };
+
+      return integrations.getRegistryProjection(
+        auth,
+        resourceId,
+      );
+    },
+  );
+
+  app.get(
+    "/v1/integration/case-triggers",
+    async (request) => {
+      const auth = await integrationAuth(
+        request as any,
+        ["adapters:read"],
+      );
+      const query = request.query as Record<string, unknown>;
+
+      return integrations.listCaseTriggers(
+        auth,
+        {
+          limit: integrationOptionalInteger(
+            query.limit,
+            "limit",
+          ),
+          severity: integrationOptionalNullableString(
+            query.severity,
+            "severity",
+          ),
+        },
+      );
     },
   );
 
