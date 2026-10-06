@@ -4,6 +4,10 @@ import {
   AuthorizationError,
   AuthorizationService,
 } from "@caiae/authorization";
+import {
+  CertificationError,
+  CertificationService,
+} from "@caiae/certifications";
 import { createPool, DomainRepository, runMigrations } from "@caiae/db";
 import {
   ExceptionError,
@@ -380,6 +384,60 @@ function findingOptionalObject(
   return value as Record<string, any>;
 }
 
+function certificationOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new CertificationError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+function certificationOptionalInteger(
+  value: unknown,
+  field: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value)) {
+    throw new CertificationError(
+      "validation",
+      `${field} must be a safe integer`,
+    );
+  }
+  return value as number;
+}
+
+function certificationOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new CertificationError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
+function certificationOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return certificationOptionalString(value, field);
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown_error";
 }
@@ -468,6 +526,21 @@ function findingHttpStatus(error: FindingError): number {
   }
 }
 
+function certificationHttpStatus(
+  error: CertificationError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -479,6 +552,7 @@ export async function buildApp() {
   const deadlines = new DeadlineService(pool);
   const evaluations = new EvaluationService(pool);
   const findings = new FindingService(pool);
+  const certifications = new CertificationService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -535,6 +609,15 @@ export async function buildApp() {
     if (error instanceof FindingError) {
       return reply
         .code(findingHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof CertificationError) {
+      return reply
+        .code(certificationHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -1803,6 +1886,230 @@ export async function buildApp() {
           "correlationId",
         ),
       });
+    },
+  );
+
+  app.post(
+    "/v1/certifications",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await certifications.issue({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        resourceId: requiredString(
+          body.resourceId,
+          "resourceId",
+        ),
+        certificationType: requiredString(
+          body.certificationType,
+          "certificationType",
+        ),
+        supportingCheckId: requiredString(
+          body.supportingCheckId,
+          "supportingCheckId",
+        ),
+        issuedByPrincipalId: requiredString(
+          body.issuedByPrincipalId,
+          "issuedByPrincipalId",
+        ),
+        validFrom: certificationOptionalString(
+          body.validFrom,
+          "validFrom",
+        ),
+        validUntil: certificationOptionalString(
+          body.validUntil,
+          "validUntil",
+        ),
+        validitySeconds: certificationOptionalInteger(
+          body.validitySeconds,
+          "validitySeconds",
+        ),
+        criteria: certificationOptionalObject(
+          body.criteria,
+          "criteria",
+        ),
+        conditions: certificationOptionalObject(
+          body.conditions,
+          "conditions",
+        ),
+        metadata: certificationOptionalObject(
+          body.metadata,
+          "metadata",
+        ),
+        correlationId: certificationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.get(
+    "/v1/certifications/:id",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return certifications.get(id);
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/resources/:resourceId/certifications",
+    async (request) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+
+      return certifications.listForResource(
+        organizationId,
+        resourceId,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/certifications/:id/renew",
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await certifications.renew({
+        certificationId: id,
+        supportingCheckId: requiredString(
+          body.supportingCheckId,
+          "supportingCheckId",
+        ),
+        issuedByPrincipalId: requiredString(
+          body.issuedByPrincipalId,
+          "issuedByPrincipalId",
+        ),
+        validFrom: certificationOptionalString(
+          body.validFrom,
+          "validFrom",
+        ),
+        validUntil: certificationOptionalString(
+          body.validUntil,
+          "validUntil",
+        ),
+        validitySeconds: certificationOptionalInteger(
+          body.validitySeconds,
+          "validitySeconds",
+        ),
+        criteria: certificationOptionalObject(
+          body.criteria,
+          "criteria",
+        ),
+        conditions: certificationOptionalObject(
+          body.conditions,
+          "conditions",
+        ),
+        metadata: certificationOptionalObject(
+          body.metadata,
+          "metadata",
+        ),
+        correlationId: certificationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.post(
+    "/v1/certifications/:id/suspend",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return certifications.suspend({
+        certificationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: certificationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/certifications/:id/reinstate",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return certifications.reinstate({
+        certificationId: id,
+        supportingCheckId: requiredString(
+          body.supportingCheckId,
+          "supportingCheckId",
+        ),
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        rationale: requiredString(
+          body.rationale,
+          "rationale",
+        ),
+        correlationId: certificationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/certifications/:id/revoke",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return certifications.revoke({
+        certificationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: certificationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.get(
+    "/v1/public/certifications/verify/:code",
+    async (request) => {
+      const { code } = request.params as { code: string };
+      const query = request.query as { at?: string };
+      const at =
+        query.at === undefined
+          ? new Date()
+          : new Date(query.at);
+
+      if (Number.isNaN(at.getTime())) {
+        throw new CertificationError(
+          "validation",
+          "at must be a valid date-time",
+        );
+      }
+
+      return certifications.verify(code, at);
     },
   );
 

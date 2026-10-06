@@ -271,13 +271,42 @@ export interface Remediation extends BaseEntity {
   cancelledAt: ISODateTime | null;
 }
 
+export type CertificationStatus =
+  | "pending"
+  | "active"
+  | "suspended"
+  | "revoked"
+  | "expired"
+  | "superseded";
+
 export interface Certification extends BaseEntity {
   resourceId: EntityId;
+  supportingCheckId: EntityId;
   certificationType: string;
-  status: "pending" | "active" | "suspended" | "revoked" | "expired";
-  issuedAt: ISODateTime | null;
-  validUntil: ISODateTime | null;
+  status: CertificationStatus;
+  certificateNumber: string;
+  verificationCode: string;
+  issuedByPrincipalId: EntityId;
+  issuedAt: ISODateTime;
+  validFrom: ISODateTime;
+  validUntil: ISODateTime;
+  criteria: JsonObject;
   conditions: JsonObject;
+  artifact: JsonObject;
+  publicArtifact: JsonObject;
+  suspendedAt: ISODateTime | null;
+  suspendedByPrincipalId: EntityId | null;
+  suspensionReason: string | null;
+  suspensionCheckId: EntityId | null;
+  reinstatedAt: ISODateTime | null;
+  reinstatedByPrincipalId: EntityId | null;
+  reinstatementCheckId: EntityId | null;
+  revokedAt: ISODateTime | null;
+  revokedByPrincipalId: EntityId | null;
+  revocationReason: string | null;
+  renewedFromCertificationId: EntityId | null;
+  supersededAt: ISODateTime | null;
+  supersededByCertificationId: EntityId | null;
 }
 
 export type DeadlineStatus =
