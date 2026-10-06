@@ -21,6 +21,11 @@ import {
   type RuleSetEvaluationResult,
 } from "@caiae/rules";
 import {
+  TraceabilityError,
+  TraceabilityService,
+  type RuleSetTraceability,
+} from "@caiae/traceability";
+import {
   EvaluationError,
   type CheckView,
   type CreateScheduleInput,
@@ -35,29 +40,39 @@ export class EvaluationService {
   private readonly evidence: EvidenceService;
   private readonly findings: FindingService;
   private readonly certifications: CertificationService;
+  private readonly traceability: TraceabilityService;
 
   constructor(private readonly pool: Pool) {
     this.evidence = new EvidenceService(pool);
     this.findings = new FindingService(pool);
     this.certifications = new CertificationService(pool);
+    this.traceability = new TraceabilityService(pool);
   }
 
   async run(input: RunCheckInput): Promise<CheckView> {
     validateRunInput(input);
-    const ruleSet = normalizeRuleSet(input.ruleSet);
     const evaluatedAt = input.evaluatedAt
       ? normalizeRequiredDate(input.evaluatedAt, "evaluatedAt")
       : new Date().toISOString();
+    const resolved =
+      await this.resolveRuleSet(
+        input.organizationId,
+        input.ruleSet,
+        input.registeredRuleSetId,
+        evaluatedAt,
+      );
 
     const checkId = await this.createPendingCheck(
       input,
-      ruleSet,
+      resolved.ruleSet,
+      resolved.registeredRuleSetId,
+      resolved.manifest,
       evaluatedAt,
     );
 
     return this.executeCheck(
       checkId,
-      ruleSet,
+      resolved.ruleSet,
       input.facts ?? {},
       new Date(evaluatedAt),
       input.correlationId ?? null,
@@ -83,7 +98,6 @@ export class EvaluationService {
       );
     }
 
-    const ruleSet = normalizeRuleSet(input.ruleSet);
     const evaluatedAt = input.evaluatedAt
       ? normalizeRequiredDate(input.evaluatedAt, "evaluatedAt")
       : new Date().toISOString();
@@ -94,7 +108,6 @@ export class EvaluationService {
         await this.run({
           ...input,
           resourceId,
-          ruleSet,
           evaluatedAt,
         }),
       );
@@ -165,10 +178,17 @@ export class EvaluationService {
     input: CreateScheduleInput,
   ): Promise<EvaluationScheduleView> {
     validateScheduleInput(input);
-    const ruleSet = normalizeRuleSet(input.ruleSet);
     const nextRunAt = input.nextRunAt
       ? normalizeRequiredDate(input.nextRunAt, "nextRunAt")
       : new Date().toISOString();
+    const resolved =
+      await this.resolveRuleSet(
+        input.organizationId,
+        input.ruleSet,
+        input.registeredRuleSetId,
+        nextRunAt,
+      );
+    const ruleSet = resolved.ruleSet;
 
     const client = await this.pool.connect();
     const scheduleId = randomUUID();
@@ -378,7 +398,15 @@ export class EvaluationService {
           await this.run({
             organizationId: schedule.organizationId,
             resourceId,
-            ruleSet: schedule.ruleSetSnapshot,
+            ...(schedule.registeredRuleSetId
+              ? {
+                  registeredRuleSetId:
+                    schedule.registeredRuleSetId,
+                }
+              : {
+                  ruleSet:
+                    schedule.ruleSetSnapshot,
+                }),
             requestedByPrincipalId:
               schedule.createdByPrincipalId,
             facts: schedule.facts,
@@ -411,6 +439,8 @@ export class EvaluationService {
   private async createPendingCheck(
     input: RunCheckInput,
     ruleSet: DeclarativeRuleSet,
+    registeredRuleSetId: string | null,
+    manifest: RuleSetTraceability,
     evaluatedAt: string,
   ): Promise<string> {
     const client = await this.pool.connect();
@@ -841,6 +871,95 @@ export class EvaluationService {
     }
   }
 
+  private async resolveRuleSet(
+    organizationId: string,
+    ruleSetInput:
+      | DeclarativeRuleSet
+      | unknown
+      | undefined,
+    registeredRuleSetId:
+      | string
+      | null
+      | undefined,
+    at: string,
+  ): Promise<{
+    ruleSet: DeclarativeRuleSet;
+    registeredRuleSetId: string | null;
+    manifest: RuleSetTraceability;
+  }> {
+    const hasRegistered =
+      typeof registeredRuleSetId ===
+        "string" &&
+      registeredRuleSetId.trim() !== "";
+    const hasAdHoc =
+      ruleSetInput !== undefined;
+
+    if (hasRegistered === hasAdHoc) {
+      throw new EvaluationError(
+        "validation",
+        "provide exactly one of ruleSet or registeredRuleSetId",
+      );
+    }
+
+    try {
+      if (hasRegistered) {
+        const loaded =
+          await this.traceability
+            .loadForEvaluation(
+              organizationId,
+              registeredRuleSetId as string,
+              at,
+            );
+
+        return {
+          ruleSet: loaded.ruleSet,
+          registeredRuleSetId:
+            registeredRuleSetId as string,
+          manifest:
+            loaded.manifest,
+        };
+      }
+
+      const normalized =
+        normalizeRuleSet(
+          ruleSetInput,
+        );
+
+      return {
+        ruleSet: normalized,
+        registeredRuleSetId: null,
+        manifest:
+          this.traceability
+            .adHocManifest(
+              normalized,
+            ),
+      };
+    } catch (error) {
+      if (
+        error instanceof
+        EvaluationError
+      ) {
+        throw error;
+      }
+
+      if (
+        error instanceof
+        TraceabilityError
+      ) {
+        throw new EvaluationError(
+          error.code === "not_found"
+            ? "not_found"
+            : error.code === "invalid_state"
+              ? "invalid_state"
+              : "validation",
+          error.message,
+        );
+      }
+
+      throw error;
+    }
+  }
+
   private async getResource(
     organizationId: string,
     resourceId: string,
@@ -900,6 +1019,20 @@ export class EvaluationService {
 }
 
 function validateRunInput(input: RunCheckInput): void {
+  const hasRegistered =
+    typeof input.registeredRuleSetId ===
+      "string" &&
+    input.registeredRuleSetId.trim() !== "";
+  const hasAdHoc =
+    input.ruleSet !== undefined;
+
+  if (hasRegistered === hasAdHoc) {
+    throw new EvaluationError(
+      "validation",
+      "provide exactly one of ruleSet or registeredRuleSetId",
+    );
+  }
+
   if (!input.organizationId.trim()) {
     throw new EvaluationError(
       "validation",
@@ -928,6 +1061,20 @@ function validateRunInput(input: RunCheckInput): void {
 function validateScheduleInput(
   input: CreateScheduleInput,
 ): void {
+  const hasRegistered =
+    typeof input.registeredRuleSetId ===
+      "string" &&
+    input.registeredRuleSetId.trim() !== "";
+  const hasAdHoc =
+    input.ruleSet !== undefined;
+
+  if (hasRegistered === hasAdHoc) {
+    throw new EvaluationError(
+      "validation",
+      "provide exactly one of ruleSet or registeredRuleSetId",
+    );
+  }
+
   if (!input.organizationId.trim()) {
     throw new EvaluationError(
       "validation",
@@ -1107,6 +1254,10 @@ function mapCheck(row: any): Check {
     completedAt: nullableIso(row.completed_at),
     evaluatedAt: nullableIso(row.evaluated_at),
     ruleSetSnapshot: row.rule_set_snapshot ?? {},
+    ruleSetHash:
+      row.rule_set_hash ?? null,
+    ruleSetProvenance:
+      row.rule_set_provenance ?? {},
     contextSnapshot: row.context_snapshot ?? {},
     evidenceTrace: Array.isArray(row.evidence_trace)
       ? row.evidence_trace
@@ -1127,8 +1278,15 @@ function mapSchedule(row: any): EvaluationSchedule {
     resourceType: row.resource_type,
     createdByPrincipalId:
       row.created_by_principal_id,
+    registeredRuleSetId:
+      row.registered_rule_set_id ??
+      null,
     ruleSetSnapshot:
       row.rule_set_snapshot ?? {},
+    ruleSetHash:
+      row.rule_set_hash ?? null,
+    ruleSetProvenance:
+      row.rule_set_provenance ?? {},
     facts: row.facts ?? {},
     intervalSeconds: Number(row.interval_seconds),
     nextRunAt: iso(row.next_run_at),
