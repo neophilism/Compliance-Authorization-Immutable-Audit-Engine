@@ -9,6 +9,10 @@ function requiredString(value: unknown, field: string): string {
   return value.trim();
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown_error";
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -22,9 +26,12 @@ export async function buildApp() {
   });
 
   app.setErrorHandler((error, _request, reply) => {
-    if (error.message.endsWith(" is required")) {
-      return reply.code(400).send({ error: error.message });
+    const message = errorMessage(error);
+
+    if (message.endsWith(" is required")) {
+      return reply.code(400).send({ error: message });
     }
+
     app.log.error(error);
     return reply.code(500).send({ error: "internal_error" });
   });
