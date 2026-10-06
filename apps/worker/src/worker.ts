@@ -3,6 +3,7 @@ import { CertificationService } from "@caiae/certifications";
 import { createPool, runMigrations } from "@caiae/db";
 import { DeadlineService } from "@caiae/deadlines";
 import { EvaluationService } from "@caiae/evaluations";
+import { IntegrationService } from "@caiae/integrations";
 import { ExceptionService } from "@caiae/exceptions";
 
 const authorizationSweepMs = Number(
@@ -20,6 +21,9 @@ const evaluationSweepMs = Number(
 const certificationSweepMs = Number(
   process.env.CERTIFICATION_SWEEP_MS ?? 30_000,
 );
+const webhookSweepMs = Number(
+  process.env.WEBHOOK_SWEEP_MS ?? 30_000,
+);
 
 for (const [name, value] of [
   ["AUTHORIZATION_SWEEP_MS", authorizationSweepMs],
@@ -27,6 +31,7 @@ for (const [name, value] of [
   ["DEADLINE_SWEEP_MS", deadlineSweepMs],
   ["EVALUATION_SWEEP_MS", evaluationSweepMs],
   ["CERTIFICATION_SWEEP_MS", certificationSweepMs],
+  ["WEBHOOK_SWEEP_MS", webhookSweepMs],
 ] as const) {
   if (!Number.isFinite(value) || value < 1_000) {
     throw new Error(
@@ -43,12 +48,14 @@ const exceptions = new ExceptionService(pool);
 const deadlines = new DeadlineService(pool);
 const evaluations = new EvaluationService(pool);
 const certifications = new CertificationService(pool);
+const integrations = new IntegrationService(pool);
 
 let authorizationSweepRunning = false;
 let exceptionSweepRunning = false;
 let deadlineSweepRunning = false;
 let evaluationSweepRunning = false;
 let certificationSweepRunning = false;
+let webhookSweepRunning = false;
 
 async function sweepAuthorizations(): Promise<void> {
   if (authorizationSweepRunning) return;
@@ -190,6 +197,34 @@ async function sweepCertifications(): Promise<void> {
   }
 }
 
+async function sweepWebhooks(): Promise<void> {
+  if (webhookSweepRunning) return;
+  webhookSweepRunning = true;
+
+  try {
+    const result = await integrations.deliverPendingWebhooks(50);
+
+    console.log(
+      JSON.stringify({
+        event: "integration.webhook_sweep",
+        at: new Date().toISOString(),
+        ...result,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "integration.webhook_sweep_failed",
+        at: new Date().toISOString(),
+        message:
+          error instanceof Error ? error.message : "unknown error",
+      }),
+    );
+  } finally {
+    webhookSweepRunning = false;
+  }
+}
+
 console.log(
   JSON.stringify({
     event: "compliance_worker.started",
@@ -199,6 +234,7 @@ console.log(
     deadlineSweepMs,
     evaluationSweepMs,
     certificationSweepMs,
+    webhookSweepMs,
   }),
 );
 
@@ -208,6 +244,7 @@ await Promise.all([
   sweepDeadlines(),
   sweepEvaluations(),
   sweepCertifications(),
+  sweepWebhooks(),
 ]);
 
 const authorizationTimer = setInterval(() => {
@@ -230,12 +267,17 @@ const certificationTimer = setInterval(() => {
   void sweepCertifications();
 }, certificationSweepMs);
 
+const webhookTimer = setInterval(() => {
+  void sweepWebhooks();
+}, webhookSweepMs);
+
 async function shutdown(signal: string): Promise<void> {
   clearInterval(authorizationTimer);
   clearInterval(exceptionTimer);
   clearInterval(deadlineTimer);
   clearInterval(evaluationTimer);
   clearInterval(certificationTimer);
+  clearInterval(webhookTimer);
 
   console.log(
     JSON.stringify({
