@@ -187,6 +187,9 @@ export type RegistryComplianceProjection = {
     evaluatedAt: string | null;
     ruleSetId: string | null;
     ruleSetVersion: string | null;
+    registeredRuleSetId: string | null;
+    ruleSetHash: string | null;
+    registrationMode: string | null;
   } | null;
   certifications: {
     validCount: number;

@@ -982,7 +982,8 @@ export class IntegrationService
     idempotencyKey: string,
     input: {
       resourceId: string;
-      ruleSet: unknown;
+      ruleSet?: unknown;
+      registeredRuleSetId?: string | null;
       facts?: JsonObject;
       evaluatedAt?: string;
       metadata?: JsonObject;
@@ -1016,6 +1017,8 @@ export class IntegrationService
               "resourceId",
             ),
           ruleSet: input.ruleSet,
+          registeredRuleSetId:
+            input.registeredRuleSetId,
           requestedByPrincipalId:
             auth.principal.id,
           facts: input.facts,

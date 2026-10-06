@@ -1,5 +1,5 @@
 {
-  "name": "@caiae/integrations",
+  "name": "@caiae/traceability",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -7,14 +7,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/rules && npm run build -w @caiae/traceability && npm run build -w @caiae/evaluations && npm run build -w @caiae/reporting && npm run build -w @caiae/publication",
+    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@caiae/core": "*",
+    "@caiae/rules": "*",
     "@caiae/db": "*",
-    "@caiae/evaluations": "*",
-    "@caiae/publication": "*",
     "pg": "^8.13.1"
   },
   "devDependencies": {

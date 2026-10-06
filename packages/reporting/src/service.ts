@@ -506,6 +506,10 @@ function mapCheck(
     objectOrEmpty(row.result);
   const counts =
     objectOrEmpty(result.counts);
+  const provenance =
+    objectOrEmpty(
+      row.rule_set_provenance,
+    );
 
   return {
     id: row.id,
@@ -523,6 +527,14 @@ function mapCheck(
     ruleSetVersion:
       stringOrNull(
         ruleSetSnapshot.version,
+      ),
+    registeredRuleSetId:
+      row.rule_set_id ?? null,
+    ruleSetHash:
+      row.rule_set_hash ?? null,
+    registrationMode:
+      stringOrNull(
+        provenance.registrationMode,
       ),
     counts:
       toJsonObject(counts),

@@ -46,6 +46,9 @@ type SupportingCheck = {
   completedAt: string | null;
   evaluatedAt: string | null;
   requestedByPrincipalId: string | null;
+  registeredRuleSetId: string | null;
+  ruleSetHash: string | null;
+  ruleSetProvenance: Record<string, any>;
   ruleSetSnapshot: Record<string, any>;
   evidenceTrace: unknown[];
   result: Record<string, any>;
@@ -979,6 +982,10 @@ export class CertificationService {
             stringOrNull(
               check.ruleSetSnapshot.version,
             ),
+          registeredRuleSetId:
+            check.registeredRuleSetId,
+          ruleSetHash:
+            check.ruleSetHash,
         },
       });
 
@@ -1507,6 +1514,14 @@ function supportingCheckSummary(
       stringOrNull(
         check.ruleSetSnapshot.version,
       ),
+    registeredRuleSetId:
+      check.registeredRuleSetId,
+    ruleSetHash:
+      check.ruleSetHash,
+    ruleSetProvenance:
+      toJsonObject(
+        check.ruleSetProvenance,
+      ),
     counts: resultCounts,
     evidenceIds:
       check.evidenceTrace
@@ -1631,6 +1646,12 @@ function mapSupportingCheck(
       nullableIso(row.evaluated_at),
     requestedByPrincipalId:
       row.requested_by_principal_id,
+    registeredRuleSetId:
+      row.rule_set_id ?? null,
+    ruleSetHash:
+      row.rule_set_hash ?? null,
+    ruleSetProvenance:
+      row.rule_set_provenance ?? {},
     ruleSetSnapshot:
       row.rule_set_snapshot ?? {},
     evidenceTrace:

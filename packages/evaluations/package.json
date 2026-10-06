@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications",
+    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/traceability && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/findings && npm run build -w @caiae/certifications",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
@@ -15,6 +15,7 @@
     "@caiae/db": "*",
     "@caiae/evidence": "*",
     "@caiae/rules": "*",
+    "@caiae/traceability": "*",
     "pg": "^8.13.1",
     "@caiae/findings": "*",
     "@caiae/certifications": "*"

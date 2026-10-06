@@ -794,6 +794,9 @@ export class PublicationService {
            evaluated_at,
            completed_at,
            created_at,
+           rule_set_id,
+           rule_set_hash,
+           rule_set_provenance,
            rule_set_snapshot
          FROM checks
          WHERE organization_id = $1
@@ -871,6 +874,10 @@ export class PublicationService {
       objectOrEmpty(
         check?.rule_set_snapshot,
       );
+    const provenance =
+      objectOrEmpty(
+        check?.rule_set_provenance,
+      );
 
     return {
       organizationId,
@@ -902,6 +909,16 @@ export class PublicationService {
               ruleSetVersion:
                 stringOrNull(
                   ruleSet.version,
+                ),
+              registeredRuleSetId:
+                check.rule_set_id ??
+                null,
+              ruleSetHash:
+                check.rule_set_hash ??
+                null,
+              registrationMode:
+                stringOrNull(
+                  provenance.registrationMode,
                 ),
             }
           : null,

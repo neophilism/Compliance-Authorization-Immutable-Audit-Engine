@@ -53,6 +53,11 @@ import {
   SecurityService,
   type AuthenticatedOperator,
 } from "@caiae/security";
+import {
+  TraceabilityError,
+  TraceabilityService,
+  type AuthorityReferenceInput,
+} from "@caiae/traceability";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -777,6 +782,96 @@ function publicationOptionalObject(
   return value as Record<string, any>;
 }
 
+function traceabilityHttpStatus(
+  error: TraceabilityError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+    case "conflict":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+function traceabilityAuthorities(
+  value: unknown,
+): AuthorityReferenceInput[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new TraceabilityError(
+      "validation",
+      "authorities must be an array",
+    );
+  }
+
+  return value.map((item, index) => {
+    if (
+      item === null ||
+      typeof item !== "object" ||
+      Array.isArray(item)
+    ) {
+      throw new TraceabilityError(
+        "validation",
+        `authorities[${index}] must be an object`,
+      );
+    }
+
+    const source =
+      item as Record<string, unknown>;
+
+    return {
+      authorityType:
+        requiredString(
+          source.authorityType,
+          `authorities[${index}].authorityType`,
+        ),
+      citation:
+        requiredString(
+          source.citation,
+          `authorities[${index}].citation`,
+        ),
+      title:
+        typeof source.title === "string"
+          ? source.title
+          : null,
+      uri:
+        typeof source.uri === "string"
+          ? source.uri
+          : null,
+      locator:
+        typeof source.locator === "string"
+          ? source.locator
+          : null,
+      jurisdiction:
+        typeof source.jurisdiction === "string"
+          ? source.jurisdiction
+          : null,
+      effectiveFrom:
+        typeof source.effectiveFrom === "string"
+          ? source.effectiveFrom
+          : null,
+      effectiveTo:
+        typeof source.effectiveTo === "string"
+          ? source.effectiveTo
+          : null,
+      metadata:
+        source.metadata !== null &&
+        typeof source.metadata === "object" &&
+        !Array.isArray(source.metadata)
+          ? source.metadata as Record<string, any>
+          : undefined,
+    };
+  });
+}
+
 function securityHttpStatus(
   error: SecurityError,
 ): number {
@@ -991,6 +1086,7 @@ export async function buildApp(
   const certifications = new CertificationService(pool);
   const reporting = new ReportingService(pool);
   const publication = new PublicationService(pool);
+  const traceability = new TraceabilityService(pool);
   const security = new SecurityService(pool, {
     bootstrapSecret:
       options.bootstrapSecret,
@@ -1013,6 +1109,7 @@ export async function buildApp(
   ): Promise<string | null> {
     const allowed = new Set([
       "policies",
+      "rule_sets",
       "resources",
       "authorizations",
       "exceptions",
@@ -1086,6 +1183,7 @@ export async function buildApp(
       [string, string]
     > = [
       ["/v1/policies/", "policies"],
+      ["/v1/rulesets/", "rule_sets"],
       ["/v1/resources/", "resources"],
       ["/v1/authorizations/", "authorizations"],
       ["/v1/exceptions/", "exceptions"],
@@ -1329,6 +1427,15 @@ export async function buildApp(
     if (error instanceof SecurityError) {
       return reply
         .code(securityHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof TraceabilityError) {
+      return reply
+        .code(traceabilityHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -1627,6 +1734,204 @@ export async function buildApp(
     if (!policy) return reply.code(404).send({ error: "not_found" });
     return policy;
   });
+
+  app.post(
+    "/v1/rulesets",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth = operatorAuth(request);
+      const registered =
+        await traceability.register({
+          organizationId:
+            requiredString(
+              body.organizationId,
+              "organizationId",
+            ),
+          policyId:
+            requiredString(
+              body.policyId,
+              "policyId",
+            ),
+          key:
+            requiredString(
+              body.key,
+              "key",
+            ),
+          ruleSet:
+            evaluationRequiredObject(
+              body.ruleSet,
+              "ruleSet",
+            ),
+          effectiveFrom:
+            evaluationOptionalNullableString(
+              body.effectiveFrom,
+              "effectiveFrom",
+            ),
+          effectiveTo:
+            evaluationOptionalNullableString(
+              body.effectiveTo,
+              "effectiveTo",
+            ),
+          supersedesRuleSetId:
+            evaluationOptionalNullableString(
+              body.supersedesRuleSetId,
+              "supersedesRuleSetId",
+            ),
+          authorities:
+            traceabilityAuthorities(
+              body.authorities,
+            ),
+          createdByPrincipalId:
+            auth.principal.id,
+          metadata:
+            evaluationOptionalObject(
+              body.metadata,
+              "metadata",
+            ),
+          correlationId:
+            evaluationOptionalNullableString(
+              body.correlationId,
+              "correlationId",
+            ),
+        });
+
+      return reply
+        .code(201)
+        .send(registered);
+    },
+  );
+
+  app.get(
+    "/v1/rulesets/:id",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      return traceability.get(id);
+    },
+  );
+
+  app.get(
+    "/v1/rulesets/:id/traceability",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      return traceability.traceability(
+        id,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/rulesets/:id/activate",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth = operatorAuth(request);
+
+      return traceability.activate({
+        ruleSetId: id,
+        principalId:
+          auth.principal.id,
+        effectiveFrom:
+          evaluationOptionalNullableString(
+            body.effectiveFrom,
+            "effectiveFrom",
+          ),
+        correlationId:
+          evaluationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/rulesets/:id/retire",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth = operatorAuth(request);
+
+      return traceability.retire({
+        ruleSetId: id,
+        principalId:
+          auth.principal.id,
+        effectiveTo:
+          evaluationOptionalNullableString(
+            body.effectiveTo,
+            "effectiveTo",
+          ),
+        reason:
+          evaluationOptionalNullableString(
+            body.reason,
+            "reason",
+          ),
+        correlationId:
+          evaluationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/rulesets",
+    async (request) => {
+      const { organizationId } =
+        request.params as {
+          organizationId: string;
+        };
+      const query =
+        request.query as {
+          key?: string;
+          status?: "draft" | "active" | "superseded" | "retired";
+        };
+
+      return traceability.list(
+        organizationId,
+        {
+          key: query.key ?? null,
+          status:
+            query.status ?? null,
+        },
+      );
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/rulesets/resolve/:key",
+    async (request) => {
+      const {
+        organizationId,
+        key,
+      } = request.params as {
+        organizationId: string;
+        key: string;
+      };
+      const query =
+        request.query as {
+          at?: string;
+        };
+
+      return traceability.resolve({
+        organizationId,
+        key,
+        at: query.at,
+      });
+    },
+  );
 
   app.post("/v1/resources", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
@@ -2508,7 +2813,12 @@ export async function buildApp(
         "organizationId",
       ),
       resourceId: requiredString(body.resourceId, "resourceId"),
-      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      ruleSet: evaluationOptionalObject(body.ruleSet, "ruleSet"),
+      registeredRuleSetId:
+        evaluationOptionalNullableString(
+          body.registeredRuleSetId,
+          "registeredRuleSetId",
+        ),
       requestedByPrincipalId: evaluationOptionalNullableString(
         body.requestedByPrincipalId,
         "requestedByPrincipalId",
@@ -2540,7 +2850,12 @@ export async function buildApp(
         "organizationId",
       ),
       resourceId: requiredString(body.resourceId, "resourceId"),
-      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      ruleSet: evaluationOptionalObject(body.ruleSet, "ruleSet"),
+      registeredRuleSetId:
+        evaluationOptionalNullableString(
+          body.registeredRuleSetId,
+          "registeredRuleSetId",
+        ),
       requestedByPrincipalId: evaluationOptionalNullableString(
         body.requestedByPrincipalId,
         "requestedByPrincipalId",
@@ -2577,7 +2892,12 @@ export async function buildApp(
         body.resourceIds,
         "resourceIds",
       ),
-      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      ruleSet: evaluationOptionalObject(body.ruleSet, "ruleSet"),
+      registeredRuleSetId:
+        evaluationOptionalNullableString(
+          body.registeredRuleSetId,
+          "registeredRuleSetId",
+        ),
       requestedByPrincipalId: evaluationOptionalNullableString(
         body.requestedByPrincipalId,
         "requestedByPrincipalId",
@@ -2637,7 +2957,12 @@ export async function buildApp(
           body.resourceType,
           "resourceType",
         ),
-        ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+        ruleSet: evaluationOptionalObject(body.ruleSet, "ruleSet"),
+      registeredRuleSetId:
+        evaluationOptionalNullableString(
+          body.registeredRuleSetId,
+          "registeredRuleSetId",
+        ),
         facts: evaluationOptionalObject(body.facts, "facts"),
         intervalSeconds: evaluationRequiredInteger(
           body.intervalSeconds,
@@ -3743,7 +4068,15 @@ export async function buildApp(
             body.resourceId,
             "resourceId",
           ),
-          ruleSet: body.ruleSet,
+          ruleSet: integrationOptionalObject(
+            body.ruleSet,
+            "ruleSet",
+          ),
+          registeredRuleSetId:
+            integrationOptionalNullableString(
+              body.registeredRuleSetId,
+              "registeredRuleSetId",
+            ),
           facts: integrationOptionalObject(
             body.facts,
             "facts",

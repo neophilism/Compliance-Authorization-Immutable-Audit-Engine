@@ -41,6 +41,9 @@ export type ReportCheck = {
   completedAt: string | null;
   ruleSetId: string | null;
   ruleSetVersion: string | null;
+  registeredRuleSetId: string | null;
+  ruleSetHash: string | null;
+  registrationMode: string | null;
   counts: JsonObject;
   errorMessage: string | null;
 };
