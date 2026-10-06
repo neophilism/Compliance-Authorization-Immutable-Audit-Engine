@@ -1188,10 +1188,23 @@ export async function buildApp(
         );
       }
 
+      const principalIdIsTarget =
+        routePath ===
+          "/v1/security/role-assignments" ||
+        routePath ===
+          "/v1/security/operator-credentials";
+
       for (
         const field of
         ACTOR_FIELDS
       ) {
+        if (
+          field === "principalId" &&
+          principalIdIsTarget
+        ) {
+          continue;
+        }
+
         const value =
           body[field];
 
