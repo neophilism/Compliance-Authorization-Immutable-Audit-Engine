@@ -39,6 +39,22 @@ export async function runMigrations(pool: Pool): Promise<void> {
   }
 }
 
+  if (!versions.has("0003_authorization_engine")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(AUTHORIZATION_ENGINE_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0003_authorization_engine"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
   id uuid PRIMARY KEY,
@@ -360,4 +376,78 @@ CREATE TRIGGER audit_events_append_only
 BEFORE UPDATE OR DELETE ON audit_events
 FOR EACH ROW
 EXECUTE FUNCTION reject_audit_event_mutation();
+`;
+
+
+const AUTHORIZATION_ENGINE_SQL = `
+ALTER TABLE authorizations
+  ADD COLUMN IF NOT EXISTS scope jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS approval_quorum integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS approval_authority text,
+  ADD COLUMN IF NOT EXISTS emergency boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS emergency_review_due_at timestamptz,
+  ADD COLUMN IF NOT EXISTS emergency_reviewed_at timestamptz;
+
+ALTER TABLE authorizations
+  DROP CONSTRAINT IF EXISTS authorizations_approval_quorum_positive;
+
+ALTER TABLE authorizations
+  ADD CONSTRAINT authorizations_approval_quorum_positive
+  CHECK (approval_quorum > 0);
+
+ALTER TABLE authorizations
+  DROP CONSTRAINT IF EXISTS authorizations_valid_window;
+
+ALTER TABLE authorizations
+  ADD CONSTRAINT authorizations_valid_window
+  CHECK (
+    valid_from IS NULL
+    OR valid_until IS NULL
+    OR valid_until > valid_from
+  );
+
+ALTER TABLE authorizations
+  DROP CONSTRAINT IF EXISTS authorizations_emergency_review_requirement;
+
+ALTER TABLE authorizations
+  ADD CONSTRAINT authorizations_emergency_review_requirement
+  CHECK (
+    emergency = false
+    OR emergency_review_due_at IS NOT NULL
+  );
+
+CREATE TABLE IF NOT EXISTS authorization_decisions (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  authorization_id uuid NOT NULL REFERENCES authorizations(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  decision text NOT NULL CHECK (decision IN ('approve', 'deny')),
+  rationale text NOT NULL DEFAULT '',
+  decided_at timestamptz NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (authorization_id, principal_id)
+);
+
+CREATE TABLE IF NOT EXISTS authorization_eligible_approvers (
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  authorization_id uuid NOT NULL REFERENCES authorizations(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (authorization_id, principal_id)
+);
+
+CREATE INDEX IF NOT EXISTS authorization_decisions_authorization_idx
+  ON authorization_decisions(authorization_id, decided_at);
+
+CREATE INDEX IF NOT EXISTS authorizations_expiration_idx
+  ON authorizations(status, valid_until)
+  WHERE status = 'approved' AND valid_until IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS authorizations_emergency_review_idx
+  ON authorizations(emergency_review_due_at)
+  WHERE emergency = true
+    AND status = 'approved'
+    AND emergency_reviewed_at IS NULL;
 `;
