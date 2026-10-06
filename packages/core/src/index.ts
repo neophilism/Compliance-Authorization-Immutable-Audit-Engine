@@ -1,3 +1,5 @@
+import type { EntityId } from "./domain.js";
+
 export * from "./domain.js";
 
 export type AuditActor = {
