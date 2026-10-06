@@ -52,7 +52,6 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
-}
 
   if (!versions.has("0004_exceptions_waivers")) {
     await pool.query("BEGIN");
