@@ -990,6 +990,234 @@ export async function buildApp() {
     },
   );
 
+  app.get(
+    "/v1/organizations/:organizationId/principals",
+    async (request) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+      const query = request.query as {
+        status?: string;
+        kind?: string;
+      };
+
+      if (
+        query.status !== undefined &&
+        query.status !== "active" &&
+        query.status !== "inactive"
+      ) {
+        throw new AuthorizationError("validation", "status must be active or inactive");
+      }
+
+      if (
+        query.kind !== undefined &&
+        query.kind !== "user" &&
+        query.kind !== "service"
+      ) {
+        throw new AuthorizationError("validation", "kind must be user or service");
+      }
+
+      const values: unknown[] = [organizationId];
+      let where = "organization_id = $1";
+
+      if (query.status) {
+        values.push(query.status);
+        where += " AND status = $" + values.length;
+      }
+
+      if (query.kind) {
+        values.push(query.kind);
+        where += " AND kind = $" + values.length;
+      }
+
+      const result = await pool.query(
+        `SELECT
+           id,
+           organization_id,
+           kind,
+           display_name,
+           external_ref,
+           status,
+           metadata,
+           created_at,
+           updated_at
+         FROM principals
+         WHERE ${where}
+         ORDER BY display_name ASC, id ASC`,
+        values,
+      );
+
+      return result.rows.map((row) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        kind: row.kind,
+        displayName: row.display_name,
+        externalRef: row.external_ref,
+        status: row.status,
+        metadata: row.metadata ?? {},
+        createdAt: (
+          row.created_at instanceof Date
+            ? row.created_at
+            : new Date(row.created_at)
+        ).toISOString(),
+        updatedAt: (
+          row.updated_at instanceof Date
+            ? row.updated_at
+            : new Date(row.updated_at)
+        ).toISOString(),
+      }));
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/authorizations",
+    async (request) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+      const query = request.query as {
+        status?: string;
+        resourceId?: string;
+      };
+      const allowed = new Set([
+        "pending",
+        "approved",
+        "denied",
+        "revoked",
+        "expired",
+      ]);
+
+      if (
+        query.status !== undefined &&
+        !allowed.has(query.status)
+      ) {
+        throw new AuthorizationError(
+          "validation",
+          "status is invalid",
+        );
+      }
+
+      const values: unknown[] = [organizationId];
+      let where = "a.organization_id = $1";
+
+      if (query.status) {
+        values.push(query.status);
+        where += " AND a.status = $" + values.length;
+      }
+
+      if (query.resourceId) {
+        values.push(query.resourceId);
+        where += " AND a.resource_id = $" + values.length;
+      }
+
+      const result = await pool.query(
+        `SELECT
+           a.*,
+           COALESCE(d.approval_count, 0)::int AS approval_count,
+           COALESCE(e.eligible_count, 0)::int AS eligible_approver_count
+         FROM authorizations AS a
+         LEFT JOIN (
+           SELECT
+             authorization_id,
+             count(*) FILTER (
+               WHERE decision = 'approve'
+             ) AS approval_count
+           FROM authorization_decisions
+           GROUP BY authorization_id
+         ) AS d
+           ON d.authorization_id = a.id
+         LEFT JOIN (
+           SELECT
+             authorization_id,
+             count(*) AS eligible_count
+           FROM authorization_eligible_approvers
+           GROUP BY authorization_id
+         ) AS e
+           ON e.authorization_id = a.id
+         WHERE ${where}
+         ORDER BY a.requested_at DESC, a.id DESC`,
+        values,
+      );
+
+      return result.rows.map((row) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        resourceId: row.resource_id,
+        authorizationType: row.authorization_type,
+        status: row.status,
+        requestedByPrincipalId:
+          row.requested_by_principal_id,
+        decidedByPrincipalId:
+          row.decided_by_principal_id,
+        requestedAt: (
+          row.requested_at instanceof Date
+            ? row.requested_at
+            : new Date(row.requested_at)
+        ).toISOString(),
+        decidedAt:
+          row.decided_at === null
+            ? null
+            : (
+                row.decided_at instanceof Date
+                  ? row.decided_at
+                  : new Date(row.decided_at)
+              ).toISOString(),
+        validFrom:
+          row.valid_from === null
+            ? null
+            : (
+                row.valid_from instanceof Date
+                  ? row.valid_from
+                  : new Date(row.valid_from)
+              ).toISOString(),
+        validUntil:
+          row.valid_until === null
+            ? null
+            : (
+                row.valid_until instanceof Date
+                  ? row.valid_until
+                  : new Date(row.valid_until)
+              ).toISOString(),
+        scope: row.scope ?? {},
+        conditions: row.conditions ?? {},
+        approvalQuorum: Number(row.approval_quorum),
+        approvalAuthority: row.approval_authority,
+        emergency: Boolean(row.emergency),
+        emergencyReviewDueAt:
+          row.emergency_review_due_at === null
+            ? null
+            : (
+                row.emergency_review_due_at instanceof Date
+                  ? row.emergency_review_due_at
+                  : new Date(row.emergency_review_due_at)
+              ).toISOString(),
+        emergencyReviewedAt:
+          row.emergency_reviewed_at === null
+            ? null
+            : (
+                row.emergency_reviewed_at instanceof Date
+                  ? row.emergency_reviewed_at
+                  : new Date(row.emergency_reviewed_at)
+              ).toISOString(),
+        approvalCount: Number(row.approval_count),
+        eligibleApproverCount: Number(
+          row.eligible_approver_count,
+        ),
+        metadata: row.metadata ?? {},
+        createdAt: (
+          row.created_at instanceof Date
+            ? row.created_at
+            : new Date(row.created_at)
+        ).toISOString(),
+        updatedAt: (
+          row.updated_at instanceof Date
+            ? row.updated_at
+            : new Date(row.updated_at)
+        ).toISOString(),
+      }));
+    },
+  );
+
   app.post("/v1/authorizations", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
 
