@@ -41,4 +41,5 @@ export type {
   ThinAppConfig,
   ThinAppFeatureFlags,
   ThinAppRuntimeConfig,
+  UpdateResourceInput,
 } from "./types.js";

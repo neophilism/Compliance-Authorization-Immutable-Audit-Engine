@@ -2036,11 +2036,39 @@ export async function buildApp(
   app.post("/v1/resources", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const attributes =
-      body.attributes &&
-      typeof body.attributes === "object" &&
-      !Array.isArray(body.attributes)
-        ? (body.attributes as Record<string, any>)
-        : {};
+      optionalObject(
+        body.attributes,
+        "attributes",
+      ) ?? {};
+    const metadata =
+      optionalObject(
+        body.metadata,
+        "metadata",
+      ) ?? {};
+    const status =
+      body.status ===
+      undefined
+        ? undefined
+        : requiredString(
+            body.status,
+            "status",
+          );
+
+    if (
+      status !== undefined &&
+      status !== "active" &&
+      status !== "inactive" &&
+      status !== "archived"
+    ) {
+      return reply
+        .code(400)
+        .send({
+          error:
+            "validation",
+          message:
+            "status must be active, inactive, or archived",
+        });
+    }
 
     const resource = await repository.createResource({
       organizationId: requiredString(
@@ -2053,8 +2081,13 @@ export async function buildApp(
       ),
       name: requiredString(body.name, "name"),
       externalRef:
-        typeof body.externalRef === "string" ? body.externalRef : null,
+        optionalNullableString(
+          body.externalRef,
+          "externalRef",
+        ) ?? null,
+      status,
       attributes,
+      metadata,
     });
     return reply.code(201).send(resource);
   });
@@ -2065,6 +2098,185 @@ export async function buildApp(
     if (!resource) return reply.code(404).send({ error: "not_found" });
     return resource;
   });
+
+  app.patch(
+    "/v1/resources/:id",
+    async (request, reply) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body =
+        (
+          request.body ??
+          {}
+        ) as Record<
+          string,
+          unknown
+        >;
+
+      const expectedUpdatedAt =
+        requiredString(
+          body.expectedUpdatedAt,
+          "expectedUpdatedAt",
+        );
+
+      if (
+        Number.isNaN(
+          new Date(
+            expectedUpdatedAt,
+          ).getTime(),
+        )
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "validation",
+            message:
+              "expectedUpdatedAt must be a valid date-time",
+          });
+      }
+
+      const mutableFields = [
+        "name",
+        "externalRef",
+        "status",
+        "attributes",
+        "metadata",
+      ];
+
+      if (
+        !mutableFields.some(
+          (field) =>
+            Object.prototype.hasOwnProperty.call(
+              body,
+              field,
+            ),
+        )
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "validation",
+            message:
+              "at least one mutable resource field is required",
+          });
+      }
+
+      const name =
+        body.name ===
+        undefined
+          ? undefined
+          : requiredString(
+              body.name,
+              "name",
+            );
+      const externalRef =
+        optionalNullableString(
+          body.externalRef,
+          "externalRef",
+        );
+      const status =
+        body.status ===
+        undefined
+          ? undefined
+          : requiredString(
+              body.status,
+              "status",
+            );
+
+      if (
+        status !==
+          undefined &&
+        status !== "active" &&
+        status !==
+          "inactive" &&
+        status !==
+          "archived"
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "validation",
+            message:
+              "status must be active, inactive, or archived",
+          });
+      }
+
+      const attributes =
+        optionalObject(
+          body.attributes,
+          "attributes",
+        );
+      const metadata =
+        optionalObject(
+          body.metadata,
+          "metadata",
+        );
+
+      const auth =
+        (
+          request as {
+            operatorAuth?:
+              AuthenticatedOperator;
+          }
+        ).operatorAuth;
+
+      const result =
+        await repository.updateResource({
+          resourceId: id,
+          expectedUpdatedAt,
+          name,
+          externalRef,
+          status,
+          attributes,
+          metadata,
+          actorPrincipalId:
+            auth?.principal.id ??
+            null,
+          correlationId:
+            optionalNullableString(
+              body.correlationId,
+              "correlationId",
+            ),
+        });
+
+      if (
+        result.status ===
+        "not_found"
+      ) {
+        return reply
+          .code(404)
+          .send({
+            error:
+              "not_found",
+            message:
+              "resource not found",
+          });
+      }
+
+      if (
+        result.status ===
+        "conflict"
+      ) {
+        return reply
+          .code(409)
+          .send({
+            error:
+              "conflict",
+            message:
+              "resource changed since expectedUpdatedAt",
+            current:
+              result.current,
+          });
+      }
+
+      return result.resource;
+    },
+  );
 
   app.get(
     "/v1/organizations/:organizationId/resources",

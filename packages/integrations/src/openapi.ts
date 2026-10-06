@@ -102,6 +102,7 @@ export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "get", path: "/v1/organizations/:organizationId/rulesets/resolve/:key", tag: "rulesets", summary: "Resolve the active ruleset version effective at a time" },
   { method: "post", path: "/v1/resources", tag: "resources", summary: "Create resource" },
   { method: "get", path: "/v1/resources/:id", tag: "resources", summary: "Get resource" },
+  { method: "patch", path: "/v1/resources/:id", tag: "resources", summary: "Update resource with optimistic concurrency" },
   { method: "get", path: "/v1/organizations/:organizationId/resources", tag: "resources", summary: "List organization resources" },
   { method: "get", path: "/v1/organizations/:organizationId/principals", tag: "organizations", summary: "List organization principals" },
   { method: "get", path: "/v1/organizations/:organizationId/authorizations", tag: "authorizations", summary: "List organization authorizations" },

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { JsonObject, Organization, Policy, Resource } from "@caiae/core";
+import { appendAuditEventWithClient } from "./audit.js";
 
 type OrganizationInput = {
   name: string;
@@ -26,6 +27,33 @@ type ResourceInput = {
   attributes?: JsonObject;
   metadata?: JsonObject;
 };
+
+export type UpdateResourceInput = {
+  resourceId: string;
+  expectedUpdatedAt: string;
+  name?: string;
+  externalRef?: string | null;
+  status?: Resource["status"];
+  attributes?: JsonObject;
+  metadata?: JsonObject;
+  actorPrincipalId?: string | null;
+  correlationId?: string | null;
+};
+
+export type UpdateResourceResult =
+  | {
+      status: "updated";
+      resource: Resource;
+      previous: Resource;
+      auditEventId: string;
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "conflict";
+      current: Resource;
+    };
 
 export class DomainRepository {
   constructor(private readonly pool: Pool) {}
@@ -96,6 +124,154 @@ export class DomainRepository {
     return result.rows[0] ? mapResource(result.rows[0]) : null;
   }
 
+  async updateResource(
+    input: UpdateResourceInput,
+  ): Promise<UpdateResourceResult> {
+    const client =
+      await this.pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const currentResult =
+        await client.query(
+          `SELECT *
+           FROM resources
+           WHERE id = $1
+           FOR UPDATE`,
+          [input.resourceId],
+        );
+
+      if (!currentResult.rows[0]) {
+        await client.query("ROLLBACK");
+        return {
+          status: "not_found",
+        };
+      }
+
+      const previous =
+        mapResource(
+          currentResult.rows[0],
+        );
+
+      if (
+        normalizeDateTime(
+          input.expectedUpdatedAt,
+        ) !== previous.updatedAt
+      ) {
+        await client.query("ROLLBACK");
+        return {
+          status: "conflict",
+          current: previous,
+        };
+      }
+
+      const next = {
+        name:
+          input.name ??
+          previous.name,
+        externalRef:
+          input.externalRef ===
+          undefined
+            ? previous.externalRef
+            : input.externalRef,
+        status:
+          input.status ??
+          previous.status,
+        attributes:
+          input.attributes ??
+          previous.attributes,
+        metadata:
+          input.metadata ??
+          previous.metadata,
+      };
+
+      const updatedResult =
+        await client.query(
+          `UPDATE resources
+           SET
+             name = $2,
+             external_ref = $3,
+             status = $4,
+             attributes = $5::jsonb,
+             metadata = $6::jsonb,
+             updated_at = now()
+           WHERE id = $1
+           RETURNING *`,
+          [
+            input.resourceId,
+            next.name,
+            next.externalRef,
+            next.status,
+            JSON.stringify(
+              next.attributes,
+            ),
+            JSON.stringify(
+              next.metadata,
+            ),
+          ],
+        );
+
+      const resource =
+        mapResource(
+          updatedResult.rows[0],
+        );
+      const changedFields =
+        resourceUpdateFields(
+          input,
+        );
+
+      const event =
+        await appendAuditEventWithClient(
+          client,
+          {
+            organizationId:
+              resource.organizationId,
+            aggregateType:
+              "resource",
+            aggregateId:
+              resource.id,
+            eventType:
+              "resource.updated",
+            actorPrincipalId:
+              input.actorPrincipalId ??
+              null,
+            correlationId:
+              input.correlationId ??
+              null,
+            occurredAt:
+              resource.updatedAt,
+            payload: {
+              changedFields,
+              before:
+                resourceAuditSnapshot(
+                  previous,
+                ),
+              after:
+                resourceAuditSnapshot(
+                  resource,
+                ),
+            },
+          },
+        );
+
+      await client.query("COMMIT");
+
+      return {
+        status: "updated",
+        resource,
+        previous,
+        auditEventId:
+          event.id,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async listResources(organizationId: string, resourceType?: string): Promise<Resource[]> {
     const result = resourceType
       ? await this.pool.query(
@@ -153,5 +329,89 @@ function mapResource(row: any): Resource {
     metadata: row.metadata ?? {},
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  };
+}
+
+function normalizeDateTime(
+  value: string,
+): string {
+  const parsed =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
+    throw new Error(
+      "expectedUpdatedAt must be a valid date-time",
+    );
+  }
+
+  return parsed.toISOString();
+}
+
+function resourceUpdateFields(
+  input: UpdateResourceInput,
+): string[] {
+  const fields: string[] = [];
+
+  if (input.name !== undefined) {
+    fields.push("name");
+  }
+  if (
+    input.externalRef !==
+    undefined
+  ) {
+    fields.push(
+      "externalRef",
+    );
+  }
+  if (
+    input.status !==
+    undefined
+  ) {
+    fields.push("status");
+  }
+  if (
+    input.attributes !==
+    undefined
+  ) {
+    fields.push(
+      "attributes",
+    );
+  }
+  if (
+    input.metadata !==
+    undefined
+  ) {
+    fields.push("metadata");
+  }
+
+  return fields;
+}
+
+function resourceAuditSnapshot(
+  resource: Resource,
+): JsonObject {
+  return {
+    id: resource.id,
+    organizationId:
+      resource.organizationId,
+    resourceType:
+      resource.resourceType,
+    name: resource.name,
+    externalRef:
+      resource.externalRef,
+    status:
+      resource.status,
+    attributes:
+      resource.attributes,
+    metadata:
+      resource.metadata,
+    createdAt:
+      resource.createdAt,
+    updatedAt:
+      resource.updatedAt,
   };
 }
