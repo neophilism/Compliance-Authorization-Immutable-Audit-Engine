@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS build
+FROM node:24.21.0-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY . .
 RUN npm install
 RUN npm run build
 
-FROM node:20-bookworm-slim AS api
+FROM node:24.21.0-bookworm-slim AS api
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -23,7 +23,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 
 CMD ["npm", "run", "start", "-w", "@caiae/api"]
 
-FROM node:20-bookworm-slim AS worker
+FROM node:24.21.0-bookworm-slim AS worker
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -33,7 +33,7 @@ USER node
 
 CMD ["npm", "run", "start", "-w", "@caiae/worker"]
 
-FROM node:20-bookworm-slim AS web
+FROM node:24.21.0-bookworm-slim AS web
 
 WORKDIR /app
 ENV NODE_ENV=production
