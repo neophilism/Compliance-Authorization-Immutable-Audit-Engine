@@ -24,6 +24,8 @@ export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "post", path: "/v1/resources", tag: "resources", summary: "Create resource" },
   { method: "get", path: "/v1/resources/:id", tag: "resources", summary: "Get resource" },
   { method: "get", path: "/v1/organizations/:organizationId/resources", tag: "resources", summary: "List organization resources" },
+  { method: "get", path: "/v1/organizations/:organizationId/principals", tag: "organizations", summary: "List organization principals" },
+  { method: "get", path: "/v1/organizations/:organizationId/authorizations", tag: "authorizations", summary: "List organization authorizations" },
   { method: "post", path: "/v1/authorizations", tag: "authorizations", summary: "Request authorization" },
   { method: "get", path: "/v1/authorizations/:id", tag: "authorizations", summary: "Get authorization" },
   { method: "get", path: "/v1/authorizations/:id/effectiveness", tag: "authorizations", summary: "Get authorization effectiveness" },
