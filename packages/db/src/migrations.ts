@@ -157,6 +157,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0011_publication_controls")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(PUBLICATION_CONTROLS_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0011_publication_controls"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -1145,4 +1160,60 @@ CREATE TRIGGER audit_events_integration_fanout
 AFTER INSERT ON audit_events
 FOR EACH ROW
 EXECUTE FUNCTION fanout_audit_event_to_integrations();
+`;
+
+
+const PUBLICATION_CONTROLS_SQL = `
+CREATE TABLE IF NOT EXISTS publication_controls (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  subject_type text NOT NULL,
+  subject_id uuid NOT NULL,
+  projection_type text NOT NULL,
+  state text NOT NULL DEFAULT 'private'
+    CHECK (state IN ('private', 'published')),
+  revision integer NOT NULL DEFAULT 1
+    CHECK (revision >= 1),
+  projection jsonb NOT NULL DEFAULT '{}'::jsonb,
+  projection_hash text NOT NULL,
+  policy jsonb NOT NULL DEFAULT '{}'::jsonb,
+  published_at timestamptz,
+  published_by_principal_id uuid REFERENCES principals(id),
+  unpublished_at timestamptz,
+  unpublished_by_principal_id uuid REFERENCES principals(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    organization_id,
+    subject_type,
+    subject_id,
+    projection_type
+  ),
+  CHECK (
+    projection_hash ~ '^[0-9a-f]{64}$'
+  ),
+  CHECK (
+    state <> 'published'
+    OR (
+      published_at IS NOT NULL
+      AND published_by_principal_id IS NOT NULL
+    )
+  )
+);
+
+CREATE INDEX IF NOT EXISTS publication_controls_public_idx
+  ON publication_controls(
+    organization_id,
+    subject_type,
+    projection_type,
+    subject_id
+  )
+  WHERE state = 'published';
+
+CREATE INDEX IF NOT EXISTS publication_controls_subject_idx
+  ON publication_controls(
+    organization_id,
+    subject_type,
+    subject_id
+  );
 `;

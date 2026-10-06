@@ -23,6 +23,7 @@ import {
 import {
   PublicationError,
   type PublicationListOptions,
+  type PublicationPolicy,
   type PublicationPreview,
   type PublicationRecord,
   type PublicationServiceOptions,
@@ -721,14 +722,14 @@ export class PublicationService {
         asOf: context.asOf,
       });
 
-    return {
+    return toJsonObject({
       schemaVersion: "1",
       organization:
         report.organization,
       asOf: report.asOf,
       summary:
         report.summary,
-    };
+    });
   }
 
   private async resourceCompliance(
@@ -1161,7 +1162,7 @@ function mapPublicationRecord(
     normalizePublicationPolicy(
       objectOrEmpty(
         row.policy,
-      ),
+      ) as PublicationPolicy,
     );
 
   return {
