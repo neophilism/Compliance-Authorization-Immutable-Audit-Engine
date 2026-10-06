@@ -82,6 +82,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0006_deadline_clock_engine")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(DEADLINE_CLOCK_ENGINE_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0006_deadline_clock_engine"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -606,4 +621,99 @@ CREATE INDEX IF NOT EXISTS evidence_attestations_evidence_idx
 
 CREATE INDEX IF NOT EXISTS evidence_attestations_validity_idx
   ON evidence_attestations(evidence_id, valid_until, revoked_at);
+`;
+
+
+const DEADLINE_CLOCK_ENGINE_SQL = `
+ALTER TABLE deadlines
+  ADD COLUMN IF NOT EXISTS created_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS anchor_at timestamptz,
+  ADD COLUMN IF NOT EXISTS due_offset_seconds bigint,
+  ADD COLUMN IF NOT EXISTS warning_window_seconds bigint NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS grace_period_seconds bigint NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS recurrence_interval_seconds bigint,
+  ADD COLUMN IF NOT EXISTS recurrence_end_at timestamptz,
+  ADD COLUMN IF NOT EXISTS max_occurrences integer,
+  ADD COLUMN IF NOT EXISTS cycle_number integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS escalation_after_seconds jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS escalation_level integer NOT NULL DEFAULT 0;
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_warning_nonnegative;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_warning_nonnegative
+  CHECK (warning_window_seconds >= 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_grace_nonnegative;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_grace_nonnegative
+  CHECK (grace_period_seconds >= 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_due_offset_positive;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_due_offset_positive
+  CHECK (due_offset_seconds IS NULL OR due_offset_seconds > 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_recurrence_positive;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_recurrence_positive
+  CHECK (
+    recurrence_interval_seconds IS NULL
+    OR recurrence_interval_seconds > 0
+  );
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_max_occurrences_positive;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_max_occurrences_positive
+  CHECK (max_occurrences IS NULL OR max_occurrences > 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_cycle_positive;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_cycle_positive
+  CHECK (cycle_number > 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_escalation_level_nonnegative;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_escalation_level_nonnegative
+  CHECK (escalation_level >= 0);
+
+ALTER TABLE deadlines
+  DROP CONSTRAINT IF EXISTS deadlines_relative_pair;
+ALTER TABLE deadlines
+  ADD CONSTRAINT deadlines_relative_pair
+  CHECK (
+    (anchor_at IS NULL AND due_offset_seconds IS NULL)
+    OR (anchor_at IS NOT NULL AND due_offset_seconds IS NOT NULL)
+  );
+
+CREATE TABLE IF NOT EXISTS deadline_occurrences (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  deadline_id uuid NOT NULL REFERENCES deadlines(id),
+  cycle_number integer NOT NULL CHECK (cycle_number > 0),
+  due_at timestamptz NOT NULL,
+  satisfied_at timestamptz NOT NULL,
+  satisfied_by_principal_id uuid NOT NULL REFERENCES principals(id),
+  outcome text NOT NULL CHECK (outcome IN ('on_time', 'late')),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (deadline_id, cycle_number)
+);
+
+CREATE INDEX IF NOT EXISTS deadlines_active_due_idx
+  ON deadlines(due_at, status)
+  WHERE status NOT IN ('satisfied', 'cancelled');
+
+CREATE INDEX IF NOT EXISTS deadlines_subject_idx
+  ON deadlines(organization_id, subject_type, subject_id);
+
+CREATE INDEX IF NOT EXISTS deadline_occurrences_deadline_idx
+  ON deadline_occurrences(deadline_id, cycle_number);
 `;
