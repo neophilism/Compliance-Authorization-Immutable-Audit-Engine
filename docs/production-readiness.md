@@ -117,7 +117,7 @@ Liveness only proves the API process can serve requests. It does not prove Postg
 GET /ready
 ```
 
-Readiness runs a database query. It returns HTTP 200 only when the API can reach PostgreSQL and HTTP 503 otherwise.
+Readiness verifies both PostgreSQL connectivity and the latest schema migration expected by the running release. It returns HTTP 200 only when both are satisfied and HTTP 503 otherwise.
 
 Load balancers should use `/ready` for traffic admission.
 
