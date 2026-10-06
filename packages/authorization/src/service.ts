@@ -250,6 +250,7 @@ export class AuthorizationService {
       const authorization = mapAuthorization(row);
 
       assertReviewable(authorization);
+      assertEmergencyReviewDeadlineOpen(authorization, new Date());
 
       await assertPrincipal(
         client,
@@ -558,7 +559,7 @@ export class AuthorizationService {
              )
            )
          ORDER BY id
-         FOR UPDATE`,
+         FOR UPDATE SKIP LOCKED`,
         [at.toISOString()],
       );
 
@@ -843,6 +844,24 @@ function assertReviewable(authorization: Authorization): void {
     "invalid_state",
     "authorization is not awaiting a decision",
   );
+}
+
+function assertEmergencyReviewDeadlineOpen(
+  authorization: Authorization,
+  at: Date,
+): void {
+  if (
+    authorization.emergency &&
+    authorization.emergencyReviewedAt === null &&
+    authorization.emergencyReviewDueAt !== null &&
+    at.getTime() >=
+      new Date(authorization.emergencyReviewDueAt).getTime()
+  ) {
+    throw new AuthorizationError(
+      "invalid_state",
+      "emergency review deadline has passed",
+    );
+  }
 }
 
 function mapAuthorization(row: any): Authorization {
