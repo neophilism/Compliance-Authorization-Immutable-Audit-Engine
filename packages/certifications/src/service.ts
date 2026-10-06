@@ -1446,6 +1446,7 @@ function effectiveStatusAt(
 ): CertificationStatus {
   if (
     certification.status === "revoked" ||
+    certification.status === "expired" ||
     certification.status === "superseded"
   ) {
     return certification.status;
