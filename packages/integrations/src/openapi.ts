@@ -153,6 +153,14 @@ export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "get", path: "/v1/reports/organizations/:organizationId/compliance", tag: "reports", summary: "Generate organization compliance report" },
   { method: "get", path: "/v1/reports/organizations/:organizationId/resources/:resourceId/compliance", tag: "reports", summary: "Generate resource compliance report" },
 
+  { method: "post", path: "/v1/authority-sources", tag: "traceability", summary: "Register an authority or source citation" },
+  { method: "get", path: "/v1/organizations/:organizationId/authority-sources", tag: "traceability", summary: "List organization authority/source citations" },
+  { method: "post", path: "/v1/rule-set-revisions", tag: "traceability", summary: "Register an immutable declarative ruleset revision" },
+  { method: "get", path: "/v1/rule-set-revisions/:id", tag: "traceability", summary: "Get an immutable ruleset revision and its authority links" },
+  { method: "get", path: "/v1/organizations/:organizationId/rule-set-revisions", tag: "traceability", summary: "List organization ruleset revisions" },
+  { method: "post", path: "/v1/rule-set-revisions/:id/activate", tag: "traceability", summary: "Activate a draft ruleset revision" },
+  { method: "post", path: "/v1/rule-set-revisions/:id/supersede", tag: "traceability", summary: "Supersede an active ruleset revision with another active revision" },
+
   { method: "post", path: "/v1/security/bootstrap", tag: "security", summary: "Bootstrap the first administrator credential using the deployment secret" },
   { method: "get", path: "/v1/security/me", tag: "security", summary: "Get the authenticated operator identity and effective permissions" },
   { method: "get", path: "/v1/security/roles", tag: "security", summary: "List organization security roles" },
@@ -379,6 +387,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       { name: "reports" },
       { name: "publication" },
       { name: "security" },
+      { name: "traceability" },
       { name: "integration-admin" },
       { name: "integration" },
       { name: "adapters" },
