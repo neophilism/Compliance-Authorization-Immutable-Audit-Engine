@@ -10,6 +10,7 @@ import type {
   SdkClientOptions,
   SdkRequestOptions,
   SdkResponse,
+  UpdateResourceInput,
 } from "./types.js";
 import { SdkError } from "./types.js";
 
@@ -210,6 +211,31 @@ export class ComplianceEngineClient {
               this.requireOrganizationId(),
             ...input,
           },
+        },
+      )
+    ).data;
+  }
+
+  async getResource(
+    resourceId: string,
+  ): Promise<Resource> {
+    return (
+      await this.request<Resource>(
+        `/v1/resources/${encodeURIComponent(resourceId)}`,
+      )
+    ).data;
+  }
+
+  async updateResource(
+    resourceId: string,
+    input: UpdateResourceInput,
+  ): Promise<Resource> {
+    return (
+      await this.request<Resource>(
+        `/v1/resources/${encodeURIComponent(resourceId)}`,
+        {
+          method: "PATCH",
+          body: input,
         },
       )
     ).data;
