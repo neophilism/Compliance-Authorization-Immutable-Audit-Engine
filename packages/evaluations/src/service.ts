@@ -10,6 +10,7 @@ import type {
 import {
   appendAuditEventWithClient,
 } from "@caiae/db";
+import { CertificationService } from "@caiae/certifications";
 import { EvidenceService } from "@caiae/evidence";
 import { FindingService } from "@caiae/findings";
 import {
@@ -33,10 +34,12 @@ import {
 export class EvaluationService {
   private readonly evidence: EvidenceService;
   private readonly findings: FindingService;
+  private readonly certifications: CertificationService;
 
   constructor(private readonly pool: Pool) {
     this.evidence = new EvidenceService(pool);
     this.findings = new FindingService(pool);
+    this.certifications = new CertificationService(pool);
   }
 
   async run(input: RunCheckInput): Promise<CheckView> {
@@ -643,9 +646,24 @@ export class EvaluationService {
             correlationId,
           );
         } catch (findingError) {
-          await this.recordFindingSyncError(
+          await this.recordPostProcessingError(
             checkId,
+            "check.finding_sync_error",
             findingError,
+            correlationId,
+          ).catch(() => undefined);
+        }
+
+        try {
+          await this.certifications.suspendForMaterialFailure(
+            checkId,
+            correlationId,
+          );
+        } catch (certificationError) {
+          await this.recordPostProcessingError(
+            checkId,
+            "check.certification_sync_error",
+            certificationError,
             correlationId,
           ).catch(() => undefined);
         }
@@ -661,8 +679,9 @@ export class EvaluationService {
     return this.get(checkId);
   }
 
-  private async recordFindingSyncError(
+  private async recordPostProcessingError(
     checkId: string,
+    eventType: string,
     error: unknown,
     correlationId: string | null,
   ): Promise<void> {
@@ -688,7 +707,7 @@ export class EvaluationService {
         organizationId: check.organizationId,
         aggregateType: "check",
         aggregateId: check.id,
-        eventType: "check.finding_sync_error",
+        eventType,
         actorPrincipalId:
           check.requestedByPrincipalId,
         correlationId,
