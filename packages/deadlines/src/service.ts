@@ -373,7 +373,7 @@ export class DeadlineService {
         satisfiedDate,
       );
       const outcome =
-        satisfiedDate.getTime() <=
+        satisfiedDate.getTime() <
         new Date(clock.overdueAt).getTime()
           ? "on_time"
           : "late";
