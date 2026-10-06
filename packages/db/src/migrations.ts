@@ -188,6 +188,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
     }
   }
 
+  if (!versions.has("0013_ruleset_traceability")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(RULESET_TRACEABILITY_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0013_ruleset_traceability"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
 }
 
 const CORE_DOMAIN_SQL = `
@@ -1299,4 +1314,146 @@ CREATE INDEX IF NOT EXISTS operator_credentials_principal_idx
 CREATE INDEX IF NOT EXISTS operator_credentials_active_expiry_idx
   ON operator_credentials(expires_at)
   WHERE status = 'active';
+`;
+
+
+const RULESET_TRACEABILITY_SQL = `
+ALTER TABLE rule_sets
+  ADD COLUMN IF NOT EXISTS definition jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS definition_hash text,
+  ADD COLUMN IF NOT EXISTS title text,
+  ADD COLUMN IF NOT EXISTS description text,
+  ADD COLUMN IF NOT EXISTS supersedes_rule_set_id uuid REFERENCES rule_sets(id),
+  ADD COLUMN IF NOT EXISTS created_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS activated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS activated_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS retired_at timestamptz,
+  ADD COLUMN IF NOT EXISTS retired_by_principal_id uuid REFERENCES principals(id);
+
+ALTER TABLE rule_sets
+  DROP CONSTRAINT IF EXISTS rule_sets_definition_hash_valid;
+
+ALTER TABLE rule_sets
+  ADD CONSTRAINT rule_sets_definition_hash_valid
+  CHECK (
+    definition_hash IS NULL
+    OR definition_hash ~ '^[0-9a-f]{64}$'
+  );
+
+CREATE INDEX IF NOT EXISTS rule_sets_effective_lookup_idx
+  ON rule_sets(
+    organization_id,
+    key,
+    status,
+    effective_from,
+    effective_to
+  );
+
+CREATE INDEX IF NOT EXISTS rule_sets_supersedes_idx
+  ON rule_sets(supersedes_rule_set_id)
+  WHERE supersedes_rule_set_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS authority_references (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  authority_type text NOT NULL,
+  citation text NOT NULL,
+  title text,
+  uri text,
+  jurisdiction text,
+  effective_from timestamptz,
+  effective_to timestamptz,
+  reference_hash text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, reference_hash),
+  CHECK (
+    reference_hash ~ '^[0-9a-f]{64}$'
+  ),
+  CHECK (
+    effective_from IS NULL
+    OR effective_to IS NULL
+    OR effective_from < effective_to
+  )
+);
+
+CREATE TABLE IF NOT EXISTS rule_set_authorities (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  rule_set_id uuid NOT NULL REFERENCES rule_sets(id),
+  authority_reference_id uuid NOT NULL REFERENCES authority_references(id),
+  locator text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    rule_set_id,
+    authority_reference_id,
+    locator
+  )
+);
+
+CREATE INDEX IF NOT EXISTS rule_set_authorities_rule_set_idx
+  ON rule_set_authorities(rule_set_id);
+
+ALTER TABLE checks
+  ADD COLUMN IF NOT EXISTS rule_set_hash text,
+  ADD COLUMN IF NOT EXISTS rule_set_provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE checks
+  DROP CONSTRAINT IF EXISTS checks_rule_set_hash_valid;
+
+ALTER TABLE checks
+  ADD CONSTRAINT checks_rule_set_hash_valid
+  CHECK (
+    rule_set_hash IS NULL
+    OR rule_set_hash ~ '^[0-9a-f]{64}$'
+  );
+
+ALTER TABLE evaluation_schedules
+  ADD COLUMN IF NOT EXISTS registered_rule_set_id uuid REFERENCES rule_sets(id),
+  ADD COLUMN IF NOT EXISTS rule_set_hash text,
+  ADD COLUMN IF NOT EXISTS rule_set_provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE evaluation_schedules
+  DROP CONSTRAINT IF EXISTS evaluation_schedules_rule_set_hash_valid;
+
+ALTER TABLE evaluation_schedules
+  ADD CONSTRAINT evaluation_schedules_rule_set_hash_valid
+  CHECK (
+    rule_set_hash IS NULL
+    OR rule_set_hash ~ '^[0-9a-f]{64}$'
+  );
+
+CREATE OR REPLACE FUNCTION protect_rule_set_immutable_content()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF
+    NEW.organization_id IS DISTINCT FROM OLD.organization_id
+    OR NEW.policy_id IS DISTINCT FROM OLD.policy_id
+    OR NEW.key IS DISTINCT FROM OLD.key
+    OR NEW.version IS DISTINCT FROM OLD.version
+    OR NEW.definition IS DISTINCT FROM OLD.definition
+    OR NEW.definition_hash IS DISTINCT FROM OLD.definition_hash
+    OR NEW.title IS DISTINCT FROM OLD.title
+    OR NEW.description IS DISTINCT FROM OLD.description
+    OR NEW.supersedes_rule_set_id IS DISTINCT FROM OLD.supersedes_rule_set_id
+    OR NEW.created_by_principal_id IS DISTINCT FROM OLD.created_by_principal_id
+  THEN
+    RAISE EXCEPTION
+      'registered ruleset content and lineage are immutable';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS rule_sets_immutable_content
+  ON rule_sets;
+
+CREATE TRIGGER rule_sets_immutable_content
+BEFORE UPDATE ON rule_sets
+FOR EACH ROW
+EXECUTE FUNCTION protect_rule_set_immutable_content();
 `;
