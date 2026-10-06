@@ -1,4 +1,5 @@
 import { AuthorizationService } from "@caiae/authorization";
+import { CertificationService } from "@caiae/certifications";
 import { createPool, runMigrations } from "@caiae/db";
 import { DeadlineService } from "@caiae/deadlines";
 import { EvaluationService } from "@caiae/evaluations";
@@ -16,12 +17,16 @@ const deadlineSweepMs = Number(
 const evaluationSweepMs = Number(
   process.env.EVALUATION_SWEEP_MS ?? 30_000,
 );
+const certificationSweepMs = Number(
+  process.env.CERTIFICATION_SWEEP_MS ?? 30_000,
+);
 
 for (const [name, value] of [
   ["AUTHORIZATION_SWEEP_MS", authorizationSweepMs],
   ["EXCEPTION_SWEEP_MS", exceptionSweepMs],
   ["DEADLINE_SWEEP_MS", deadlineSweepMs],
   ["EVALUATION_SWEEP_MS", evaluationSweepMs],
+  ["CERTIFICATION_SWEEP_MS", certificationSweepMs],
 ] as const) {
   if (!Number.isFinite(value) || value < 1_000) {
     throw new Error(
@@ -37,11 +42,13 @@ const authorizations = new AuthorizationService(pool);
 const exceptions = new ExceptionService(pool);
 const deadlines = new DeadlineService(pool);
 const evaluations = new EvaluationService(pool);
+const certifications = new CertificationService(pool);
 
 let authorizationSweepRunning = false;
 let exceptionSweepRunning = false;
 let deadlineSweepRunning = false;
 let evaluationSweepRunning = false;
+let certificationSweepRunning = false;
 
 async function sweepAuthorizations(): Promise<void> {
   if (authorizationSweepRunning) return;
@@ -155,6 +162,34 @@ async function sweepEvaluations(): Promise<void> {
   }
 }
 
+async function sweepCertifications(): Promise<void> {
+  if (certificationSweepRunning) return;
+  certificationSweepRunning = true;
+
+  try {
+    const result = await certifications.sweep(new Date());
+
+    console.log(
+      JSON.stringify({
+        event: "certification.lifecycle_sweep",
+        at: new Date().toISOString(),
+        ...result,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "certification.lifecycle_sweep_failed",
+        at: new Date().toISOString(),
+        message:
+          error instanceof Error ? error.message : "unknown error",
+      }),
+    );
+  } finally {
+    certificationSweepRunning = false;
+  }
+}
+
 console.log(
   JSON.stringify({
     event: "compliance_worker.started",
@@ -163,6 +198,7 @@ console.log(
     exceptionSweepMs,
     deadlineSweepMs,
     evaluationSweepMs,
+    certificationSweepMs,
   }),
 );
 
@@ -171,6 +207,7 @@ await Promise.all([
   sweepExceptions(),
   sweepDeadlines(),
   sweepEvaluations(),
+  sweepCertifications(),
 ]);
 
 const authorizationTimer = setInterval(() => {
@@ -189,11 +226,16 @@ const evaluationTimer = setInterval(() => {
   void sweepEvaluations();
 }, evaluationSweepMs);
 
+const certificationTimer = setInterval(() => {
+  void sweepCertifications();
+}, certificationSweepMs);
+
 async function shutdown(signal: string): Promise<void> {
   clearInterval(authorizationTimer);
   clearInterval(exceptionTimer);
   clearInterval(deadlineTimer);
   clearInterval(evaluationTimer);
+  clearInterval(certificationTimer);
 
   console.log(
     JSON.stringify({
