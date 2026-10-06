@@ -1,4 +1,4 @@
-export type EntityId = string;
+export * from "./domain.js";
 
 export type AuditActor = {
   id: EntityId;
