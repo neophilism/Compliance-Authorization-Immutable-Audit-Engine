@@ -97,7 +97,14 @@ export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "post", path: "/v1/integration/import/resources", tag: "integration", summary: "Import resources from an external system", integrationAuth: true, idempotency: true },
   { method: "get", path: "/v1/integration/export/resources", tag: "integration", summary: "Export resources as a portable bundle", integrationAuth: true },
   { method: "get", path: "/v1/integration/resources/:resourceId/registry-projection", tag: "adapters", summary: "Get Registry engine compliance projection", integrationAuth: true },
-  { method: "get", path: "/v1/integration/case-triggers", tag: "adapters", summary: "List Case Workflow engine triggers", integrationAuth: true }
+  { method: "get", path: "/v1/integration/case-triggers", tag: "adapters", summary: "List Case Workflow engine triggers", integrationAuth: true },
+  { method: "post", path: "/v1/publications/preview", tag: "publication", summary: "Preview a deterministic public-safe projection" },
+  { method: "post", path: "/v1/publications/publish", tag: "publication", summary: "Publish a public-safe projection snapshot" },
+  { method: "post", path: "/v1/publications/unpublish", tag: "publication", summary: "Remove a publication snapshot from public visibility" },
+  { method: "get", path: "/v1/publications/:id", tag: "publication", summary: "Get an internal publication control record" },
+  { method: "get", path: "/v1/organizations/:organizationId/publications", tag: "publication", summary: "List organization publication controls" },
+  { method: "get", path: "/v1/public/publications/:id", tag: "publication", summary: "Get a published public-safe projection" },
+  { method: "get", path: "/v1/public/organizations/:organizationId/publications", tag: "publication", summary: "List published public-safe projections" }
 ];
 
 export function buildOpenApiDocument(): Record<string, unknown> {
@@ -222,7 +229,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
         "Compliance, Authorization & Immutable Audit Engine API",
       version: "0.1.0",
       description:
-        "Route-complete API contract for the reusable compliance engine. Earlier engine routes intentionally retain generic object schemas until their public DTOs are versioned; PR 13 adds stable integration authentication, idempotency, cursor pagination, event/webhook, import/export, and adapter contracts.",
+        "Route-complete API contract for the reusable compliance engine. Internal domain APIs remain separate from the PR 15 publication boundary, which exposes only deterministic allowlisted publication snapshots and existing public certification verification artifacts.",
     },
     servers: [
       {
@@ -243,6 +250,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       { name: "remediations" },
       { name: "certifications" },
       { name: "reports" },
+      { name: "publication" },
       { name: "integration-admin" },
       { name: "integration" },
       { name: "adapters" },

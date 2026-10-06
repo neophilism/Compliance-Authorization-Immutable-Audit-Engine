@@ -41,6 +41,10 @@ import {
   ReportingService,
   renderComplianceReport,
 } from "@caiae/reporting";
+import {
+  PublicationError,
+  PublicationService,
+} from "@caiae/publication";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -581,6 +585,64 @@ function reportOptionalString(
   return value.trim();
 }
 
+function publicationHttpStatus(
+  error: PublicationError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+function publicationOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    value.trim() === ""
+  ) {
+    throw new PublicationError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+function publicationOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return publicationOptionalString(value, field);
+}
+
+function publicationOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new PublicationError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
 function certificationHttpStatus(
   error: CertificationError,
 ): number {
@@ -773,6 +835,7 @@ export async function buildApp() {
   const findings = new FindingService(pool);
   const certifications = new CertificationService(pool);
   const reporting = new ReportingService(pool);
+  const publication = new PublicationService(pool);
   const integrations = new IntegrationService(pool);
 
   await app.register(cors, { origin: true });
@@ -848,6 +911,15 @@ export async function buildApp() {
     if (error instanceof ReportingError) {
       return reply
         .code(reportingHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof PublicationError) {
+      return reply
+        .code(publicationHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -2572,6 +2644,207 @@ export async function buildApp() {
           "correlationId",
         ),
       });
+    },
+  );
+
+  app.post(
+    "/v1/publications/preview",
+    async (request) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return publication.preview({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        subjectType: requiredString(
+          body.subjectType,
+          "subjectType",
+        ),
+        subjectId: requiredString(
+          body.subjectId,
+          "subjectId",
+        ),
+        projectionType: requiredString(
+          body.projectionType,
+          "projectionType",
+        ),
+        asOf: publicationOptionalString(
+          body.asOf,
+          "asOf",
+        ),
+        policy: publicationOptionalObject(
+          body.policy,
+          "policy",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/publications/publish",
+    async (request) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return publication.publish({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        subjectType: requiredString(
+          body.subjectType,
+          "subjectType",
+        ),
+        subjectId: requiredString(
+          body.subjectId,
+          "subjectId",
+        ),
+        projectionType: requiredString(
+          body.projectionType,
+          "projectionType",
+        ),
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        asOf: publicationOptionalString(
+          body.asOf,
+          "asOf",
+        ),
+        policy: publicationOptionalObject(
+          body.policy,
+          "policy",
+        ),
+        correlationId:
+          publicationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/publications/unpublish",
+    async (request) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return publication.unpublish({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        subjectType: requiredString(
+          body.subjectType,
+          "subjectType",
+        ),
+        subjectId: requiredString(
+          body.subjectId,
+          "subjectId",
+        ),
+        projectionType: requiredString(
+          body.projectionType,
+          "projectionType",
+        ),
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason:
+          publicationOptionalNullableString(
+            body.reason,
+            "reason",
+          ),
+        correlationId:
+          publicationOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
+
+  app.get(
+    "/v1/publications/:id",
+    async (request) => {
+      const { id } = request.params as {
+        id: string;
+      };
+      return publication.getById(id);
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/publications",
+    async (request) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+      const query = request.query as Record<string, unknown>;
+
+      return publication.listControls(
+        organizationId,
+        {
+          subjectType:
+            publicationOptionalNullableString(
+              query.subjectType,
+              "subjectType",
+            ),
+          subjectId:
+            publicationOptionalNullableString(
+              query.subjectId,
+              "subjectId",
+            ),
+          projectionType:
+            publicationOptionalNullableString(
+              query.projectionType,
+              "projectionType",
+            ),
+        },
+      );
+    },
+  );
+
+  app.get(
+    "/v1/public/publications/:id",
+    async (request) => {
+      const { id } = request.params as {
+        id: string;
+      };
+      return publication.getPublicById(
+        id,
+      );
+    },
+  );
+
+  app.get(
+    "/v1/public/organizations/:organizationId/publications",
+    async (request) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+      const query = request.query as Record<string, unknown>;
+
+      return publication.listPublic(
+        organizationId,
+        {
+          subjectType:
+            publicationOptionalNullableString(
+              query.subjectType,
+              "subjectType",
+            ),
+          subjectId:
+            publicationOptionalNullableString(
+              query.subjectId,
+              "subjectId",
+            ),
+          projectionType:
+            publicationOptionalNullableString(
+              query.projectionType,
+              "projectionType",
+            ),
+        },
+      );
     },
   );
 
