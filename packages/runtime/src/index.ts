@@ -193,8 +193,9 @@ export function assertProductionSecurity(
   );
 
   if (
-    env.CAIAE_BOOTSTRAP_SECRET !==
-    undefined
+    nonEmpty(
+      env.CAIAE_BOOTSTRAP_SECRET,
+    )
   ) {
     secret(
       env.CAIAE_BOOTSTRAP_SECRET,
