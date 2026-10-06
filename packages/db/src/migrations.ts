@@ -1,5 +1,8 @@
 import type { Pool } from "pg";
 
+export const LATEST_SCHEMA_VERSION =
+  "0013_ruleset_traceability";
+
 export async function runMigrations(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
