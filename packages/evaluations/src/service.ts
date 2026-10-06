@@ -11,6 +11,7 @@ import {
   appendAuditEventWithClient,
 } from "@caiae/db";
 import { EvidenceService } from "@caiae/evidence";
+import { FindingService } from "@caiae/findings";
 import {
   evaluateRuleSet,
   parseRuleSet,
@@ -31,9 +32,11 @@ import {
 
 export class EvaluationService {
   private readonly evidence: EvidenceService;
+  private readonly findings: FindingService;
 
   constructor(private readonly pool: Pool) {
     this.evidence = new EvidenceService(pool);
+    this.findings = new FindingService(pool);
   }
 
   async run(input: RunCheckInput): Promise<CheckView> {
@@ -632,6 +635,21 @@ export class EvaluationService {
       } finally {
         client.release();
       }
+
+      if (status === "failed") {
+        try {
+          await this.findings.syncFailedCheck(
+            checkId,
+            correlationId,
+          );
+        } catch (findingError) {
+          await this.recordFindingSyncError(
+            checkId,
+            findingError,
+            correlationId,
+          ).catch(() => undefined);
+        }
+      }
     } catch (error) {
       await this.markError(
         checkId,
@@ -641,6 +659,49 @@ export class EvaluationService {
     }
 
     return this.get(checkId);
+  }
+
+  private async recordFindingSyncError(
+    checkId: string,
+    error: unknown,
+    correlationId: string | null,
+  ): Promise<void> {
+    const result = await this.pool.query(
+      "SELECT * FROM checks WHERE id = $1",
+      [checkId],
+    );
+
+    if (!result.rows[0]) return;
+
+    const check = mapCheck(result.rows[0]);
+    const message =
+      error instanceof Error
+        ? error.message
+        : "unknown finding synchronization error";
+
+    const client = await this.pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      await appendAuditEventWithClient(client, {
+        organizationId: check.organizationId,
+        aggregateType: "check",
+        aggregateId: check.id,
+        eventType: "check.finding_sync_error",
+        actorPrincipalId:
+          check.requestedByPrincipalId,
+        correlationId,
+        payload: { message },
+      });
+
+      await client.query("COMMIT");
+    } catch (secondaryError) {
+      await client.query("ROLLBACK");
+      throw secondaryError;
+    } finally {
+      client.release();
+    }
   }
 
   private async transitionToRunning(

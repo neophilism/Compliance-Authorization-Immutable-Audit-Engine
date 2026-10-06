@@ -21,6 +21,10 @@ import {
   EvaluationError,
   EvaluationService,
 } from "@caiae/evaluations";
+import {
+  FindingError,
+  FindingService,
+} from "@caiae/findings";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -308,6 +312,74 @@ function evaluationStringArray(
   });
 }
 
+function findingOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new FindingError(
+      "validation",
+      `${field} must be a non-empty string or null`,
+    );
+  }
+  return value.trim();
+}
+
+function findingOptionalInteger(
+  value: unknown,
+  field: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value)) {
+    throw new FindingError(
+      "validation",
+      `${field} must be a safe integer`,
+    );
+  }
+  return value as number;
+}
+
+function findingOptionalNumberArray(
+  value: unknown,
+  field: string,
+): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new FindingError(
+      "validation",
+      `${field} must be an array of integers`,
+    );
+  }
+  return value.map((item, index) => {
+    if (!Number.isSafeInteger(item)) {
+      throw new FindingError(
+        "validation",
+        `${field}[${index}] must be a safe integer`,
+      );
+    }
+    return item as number;
+  });
+}
+
+function findingOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new FindingError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown_error";
 }
@@ -383,6 +455,19 @@ function evaluationHttpStatus(error: EvaluationError): number {
   }
 }
 
+function findingHttpStatus(error: FindingError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -393,6 +478,7 @@ export async function buildApp() {
   const evidence = new EvidenceService(pool);
   const deadlines = new DeadlineService(pool);
   const evaluations = new EvaluationService(pool);
+  const findings = new FindingService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -440,6 +526,15 @@ export async function buildApp() {
     if (error instanceof EvaluationError) {
       return reply
         .code(evaluationHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof FindingError) {
+      return reply
+        .code(findingHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -1347,6 +1442,367 @@ export async function buildApp() {
           "correlationId",
         ),
       );
+    },
+  );
+
+  app.post(
+    "/v1/checks/:id/findings/sync",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return {
+        findings: await findings.syncFailedCheck(
+          id,
+          findingOptionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+        ),
+      };
+    },
+  );
+
+  app.get("/v1/findings/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return findings.get(id);
+  });
+
+  app.get(
+    "/v1/organizations/:organizationId/resources/:resourceId/findings",
+    async (request) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+      const query = request.query as { status?: string };
+      const allowed = new Set([
+        "open",
+        "acknowledged",
+        "disputed",
+        "remediating",
+        "resolved",
+        "closed",
+      ]);
+
+      if (
+        query.status !== undefined &&
+        !allowed.has(query.status)
+      ) {
+        throw new FindingError(
+          "validation",
+          "status is invalid",
+        );
+      }
+
+      return findings.listForResource(
+        organizationId,
+        resourceId,
+        query.status === undefined
+          ? {}
+          : {
+              status: query.status as
+                | "open"
+                | "acknowledged"
+                | "disputed"
+                | "remediating"
+                | "resolved"
+                | "closed",
+            },
+      );
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/owner",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.assignOwner({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        ownerPrincipalId: findingOptionalNullableString(
+          body.ownerPrincipalId,
+          "ownerPrincipalId",
+        ) ?? null,
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/acknowledge",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.acknowledge({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/dispute",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.dispute({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/resolve-dispute",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      if (
+        body.outcome !== "uphold" &&
+        body.outcome !== "dismiss"
+      ) {
+        throw new FindingError(
+          "validation",
+          "outcome must be uphold or dismiss",
+        );
+      }
+
+      return findings.resolveDispute({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        outcome: body.outcome,
+        rationale: requiredString(
+          body.rationale,
+          "rationale",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/remediations",
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await findings.createRemediation({
+        findingId: id,
+        createdByPrincipalId: requiredString(
+          body.createdByPrincipalId,
+          "createdByPrincipalId",
+        ),
+        ownerPrincipalId: findingOptionalNullableString(
+          body.ownerPrincipalId,
+          "ownerPrincipalId",
+        ),
+        plan: requiredString(body.plan, "plan"),
+        dueAt: findingOptionalNullableString(
+          body.dueAt,
+          "dueAt",
+        ),
+        warningWindowSeconds: findingOptionalInteger(
+          body.warningWindowSeconds,
+          "warningWindowSeconds",
+        ),
+        gracePeriodSeconds: findingOptionalInteger(
+          body.gracePeriodSeconds,
+          "gracePeriodSeconds",
+        ),
+        escalationAfterSeconds: findingOptionalNumberArray(
+          body.escalationAfterSeconds,
+          "escalationAfterSeconds",
+        ),
+        metadata: findingOptionalObject(
+          body.metadata,
+          "metadata",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.post(
+    "/v1/remediations/:id/start",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.startRemediation({
+        remediationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/remediations/:id/submit",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.submitForVerification({
+        remediationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/remediations/:id/verify",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.verifyRemediation({
+        remediationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        note: findingOptionalNullableString(
+          body.note,
+          "note",
+        ) ?? undefined,
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/remediations/:id/reject",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.rejectRemediation({
+        remediationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/remediations/:id/cancel",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.cancelRemediation({
+        remediationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/close",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.close({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/findings/:id/reopen",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return findings.reopen({
+        findingId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        correlationId: findingOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
     },
   );
 
