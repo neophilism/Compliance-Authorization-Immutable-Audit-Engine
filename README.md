@@ -20,7 +20,7 @@ The upstream engine is intentionally domain-neutral. Bill-specific applications 
 
 ## Local development
 
-Requirements: Node.js 20+, npm, Docker.
+Requirements: Node.js 24 LTS, npm, Docker.
 
 ```bash
 cp .env.example .env
