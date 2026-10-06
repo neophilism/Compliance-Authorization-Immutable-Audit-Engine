@@ -1,5 +1,6 @@
 import { AuthorizationService } from "@caiae/authorization";
 import { createPool, runMigrations } from "@caiae/db";
+import { DeadlineService } from "@caiae/deadlines";
 import { ExceptionService } from "@caiae/exceptions";
 
 const authorizationSweepMs = Number(
@@ -8,10 +9,14 @@ const authorizationSweepMs = Number(
 const exceptionSweepMs = Number(
   process.env.EXCEPTION_SWEEP_MS ?? 30_000,
 );
+const deadlineSweepMs = Number(
+  process.env.DEADLINE_SWEEP_MS ?? 30_000,
+);
 
 for (const [name, value] of [
   ["AUTHORIZATION_SWEEP_MS", authorizationSweepMs],
   ["EXCEPTION_SWEEP_MS", exceptionSweepMs],
+  ["DEADLINE_SWEEP_MS", deadlineSweepMs],
 ] as const) {
   if (!Number.isFinite(value) || value < 1_000) {
     throw new Error(
@@ -25,9 +30,11 @@ await runMigrations(pool);
 
 const authorizations = new AuthorizationService(pool);
 const exceptions = new ExceptionService(pool);
+const deadlines = new DeadlineService(pool);
 
 let authorizationSweepRunning = false;
 let exceptionSweepRunning = false;
+let deadlineSweepRunning = false;
 
 async function sweepAuthorizations(): Promise<void> {
   if (authorizationSweepRunning) return;
@@ -85,18 +92,48 @@ async function sweepExceptions(): Promise<void> {
   }
 }
 
+async function sweepDeadlines(): Promise<void> {
+  if (deadlineSweepRunning) return;
+  deadlineSweepRunning = true;
+
+  try {
+    const result = await deadlines.sweep(new Date());
+
+    console.log(
+      JSON.stringify({
+        event: "deadline.clock_sweep",
+        at: new Date().toISOString(),
+        ...result,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "deadline.clock_sweep_failed",
+        at: new Date().toISOString(),
+        message:
+          error instanceof Error ? error.message : "unknown error",
+      }),
+    );
+  } finally {
+    deadlineSweepRunning = false;
+  }
+}
+
 console.log(
   JSON.stringify({
     event: "compliance_worker.started",
     at: new Date().toISOString(),
     authorizationSweepMs,
     exceptionSweepMs,
+    deadlineSweepMs,
   }),
 );
 
 await Promise.all([
   sweepAuthorizations(),
   sweepExceptions(),
+  sweepDeadlines(),
 ]);
 
 const authorizationTimer = setInterval(() => {
@@ -107,9 +144,14 @@ const exceptionTimer = setInterval(() => {
   void sweepExceptions();
 }, exceptionSweepMs);
 
+const deadlineTimer = setInterval(() => {
+  void sweepDeadlines();
+}, deadlineSweepMs);
+
 async function shutdown(signal: string): Promise<void> {
   clearInterval(authorizationTimer);
   clearInterval(exceptionTimer);
+  clearInterval(deadlineTimer);
 
   console.log(
     JSON.stringify({
