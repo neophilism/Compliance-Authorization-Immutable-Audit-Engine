@@ -386,7 +386,7 @@ test("audit outbox fans out subscribed events and webhook delivery is HMAC signe
         String(init?.body ?? ""),
     });
 
-    return new Response("", {
+    return new Response(null, {
       status: 204,
     });
   }) as typeof fetch;
