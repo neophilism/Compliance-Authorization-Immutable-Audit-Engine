@@ -284,8 +284,8 @@ async function fixture() {
        $1, $2, $3, $4,
        'baseline-compliance',
        'pending',
-       'CERT-REPORTINGTEST1',
-       'reporting-verification-code',
+       $6,
+       $7,
        $5,
        '2026-10-01T12:00:00Z',
        '2026-10-02T12:00:00Z',
@@ -302,6 +302,8 @@ async function fixture() {
       resourceA,
       checkA,
       principalId,
+      `CERT-${certificationId.replaceAll("-", "").slice(0, 20).toUpperCase()}`,
+      `verification-${certificationId}`,
     ],
   );
 
