@@ -19,6 +19,9 @@ import {
 import {
   EvaluationService,
 } from "@caiae/evaluations";
+import {
+  PublicationService,
+} from "@caiae/publication";
 import type {
   CaseWorkflowIntegrationAdapter,
   RegistryIntegrationAdapter,
@@ -70,6 +73,7 @@ export class IntegrationService
     CaseWorkflowIntegrationAdapter
 {
   private readonly evaluations: EvaluationService;
+  private readonly publication: PublicationService;
   private readonly webhookMasterSecret: string;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => Date;
@@ -81,6 +85,11 @@ export class IntegrationService
   ) {
     this.evaluations =
       new EvaluationService(pool);
+    this.publication =
+      new PublicationService(pool, {
+        now:
+          options.now,
+      });
     this.webhookMasterSecret =
       options.webhookMasterSecret ??
       process.env.CAIAE_WEBHOOK_MASTER_SECRET ??
@@ -1743,168 +1752,12 @@ export class IntegrationService
       ["adapters:read"],
     );
 
-    const resourceResult =
-      await this.pool.query(
-        `SELECT *
-         FROM resources
-         WHERE id = $1
-           AND organization_id = $2`,
-        [
-          resourceId,
-          auth.credential.organizationId,
-        ],
-      );
-
-    if (!resourceResult.rows[0]) {
-      throw new IntegrationError(
-        "not_found",
-        "resource not found",
-      );
-    }
-
-    const [
-      checkResult,
-      certificationResult,
-      findingResult,
-    ] = await Promise.all([
-      this.pool.query(
-        `SELECT *
-         FROM checks
-         WHERE organization_id = $1
-           AND resource_id = $2
-         ORDER BY
-           COALESCE(
-             evaluated_at,
-             completed_at,
-             created_at
-           ) DESC,
-           id DESC
-         LIMIT 1`,
-        [
-          auth.credential.organizationId,
-          resourceId,
-        ],
-      ),
-      this.pool.query(
-        `SELECT
-           count(*)::int AS count,
-           COALESCE(
-             jsonb_agg(
-               certificate_number
-               ORDER BY certificate_number
-             ) FILTER (
-               WHERE certificate_number IS NOT NULL
-             ),
-             '[]'::jsonb
-           ) AS certificate_numbers
-         FROM certifications
-         WHERE organization_id = $1
-           AND resource_id = $2
-           AND status = 'active'
-           AND valid_from <= $3
-           AND valid_until > $3`,
-        [
-          auth.credential.organizationId,
-          resourceId,
-          this.now().toISOString(),
-        ],
-      ),
-      this.pool.query(
-        `SELECT
-           count(*) FILTER (
-             WHERE status NOT IN ('resolved', 'closed')
-           )::int AS unresolved,
-           count(*) FILTER (
-             WHERE status NOT IN ('resolved', 'closed')
-               AND severity IN ('high', 'critical')
-           )::int AS unresolved_material
-         FROM findings
-         WHERE organization_id = $1
-           AND resource_id = $2`,
-        [
-          auth.credential.organizationId,
-          resourceId,
-        ],
-      ),
-    ]);
-
-    const resource =
-      mapResource(
-        resourceResult.rows[0],
-      );
-    const check =
-      checkResult.rows[0];
-    const ruleSet =
-      check
-        ? objectOrEmpty(
-            check.rule_set_snapshot,
-          )
-        : {};
-
-    return {
-      organizationId:
+    return this.publication
+      .buildResourceComplianceProjection(
         auth.credential.organizationId,
-      resource: {
-        id: resource.id,
-        resourceType:
-          resource.resourceType,
-        name: resource.name,
-        externalRef:
-          resource.externalRef,
-        status: resource.status,
-      },
-      latestCheck:
-        check
-          ? {
-              id: check.id,
-              status:
-                check.status,
-              evaluatedAt:
-                nullableIso(
-                  check.evaluated_at,
-                ),
-              ruleSetId:
-                stringOrNull(
-                  ruleSet.id,
-                ),
-              ruleSetVersion:
-                stringOrNull(
-                  ruleSet.version,
-                ),
-            }
-          : null,
-      certifications: {
-        validCount:
-          Number(
-            certificationResult
-              .rows[0]
-              ?.count ?? 0,
-          ),
-        activeCertificateNumbers:
-          Array.isArray(
-            certificationResult
-              .rows[0]
-              ?.certificate_numbers,
-          )
-            ? certificationResult
-                .rows[0]
-                .certificate_numbers
-            : [],
-      },
-      findings: {
-        unresolvedCount:
-          Number(
-            findingResult.rows[0]
-              ?.unresolved ?? 0,
-          ),
-        unresolvedHighCriticalCount:
-          Number(
-            findingResult.rows[0]
-              ?.unresolved_material ??
-              0,
-          ),
-      },
-    };
+        resourceId,
+        this.now().toISOString(),
+      );
   }
 
   async listCaseTriggers(

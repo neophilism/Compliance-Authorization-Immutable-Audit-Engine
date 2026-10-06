@@ -7,13 +7,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/rules && npm run build -w @caiae/evaluations",
+    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/rules && npm run build -w @caiae/evaluations && npm run build -w @caiae/reporting && npm run build -w @caiae/publication",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@caiae/core": "*",
     "@caiae/db": "*",
     "@caiae/evaluations": "*",
+    "@caiae/publication": "*",
     "pg": "^8.13.1"
   },
   "devDependencies": {
