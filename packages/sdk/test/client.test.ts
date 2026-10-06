@@ -241,3 +241,132 @@ test("client rejects mixed token families", () => {
     /caiae_/,
   );
 });
+
+
+test("operator client gets and updates resources with optimistic concurrency", async () => {
+  const calls:
+    Array<{
+      url: string;
+      init?: RequestInit;
+    }> = [];
+  const resource = {
+    id:
+      "22222222-2222-4222-8222-222222222222",
+    organizationId:
+      ORG,
+    resourceType:
+      "generic",
+    name:
+      "Updated resource",
+    externalRef:
+      null,
+    status:
+      "active",
+    attributes: {
+      state:
+        "updated",
+    },
+    metadata: {},
+    createdAt:
+      "2026-10-06T16:00:00.000Z",
+    updatedAt:
+      "2026-10-06T16:05:00.000Z",
+  };
+
+  const client =
+    createOperatorClient({
+      baseUrl:
+        "https://engine.example",
+      organizationId:
+        ORG,
+      token:
+        "caiau_operator_secret",
+      transport: {
+        fetchImpl:
+          async (
+            input,
+            init,
+          ) => {
+            calls.push({
+              url:
+                String(input),
+              init,
+            });
+            return new Response(
+              JSON.stringify(
+                resource,
+              ),
+              {
+                status: 200,
+                headers: {
+                  "content-type":
+                    "application/json",
+                },
+              },
+            );
+          },
+      },
+    });
+
+  const fetched =
+    await client.getResource(
+      resource.id,
+    );
+  assert.equal(
+    fetched.id,
+    resource.id,
+  );
+
+  const updated =
+    await client.updateResource(
+      resource.id,
+      {
+        expectedUpdatedAt:
+          "2026-10-06T16:00:00.000Z",
+        name:
+          "Updated resource",
+        attributes: {
+          state:
+            "updated",
+        },
+        correlationId:
+          "sdk-resource-update",
+      },
+    );
+
+  assert.equal(
+    updated.name,
+    "Updated resource",
+  );
+  assert.equal(
+    calls.length,
+    2,
+  );
+  assert.match(
+    calls[1]!.url,
+    new RegExp(
+      "/v1/resources/" +
+        resource.id +
+        "$",
+    ),
+  );
+  assert.equal(
+    calls[1]!.init?.method,
+    "PATCH",
+  );
+  const body =
+    JSON.parse(
+      String(
+        calls[1]!.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    body.expectedUpdatedAt,
+    "2026-10-06T16:00:00.000Z",
+  );
+  assert.equal(
+    body.correlationId,
+    "sdk-resource-update",
+  );
+});
