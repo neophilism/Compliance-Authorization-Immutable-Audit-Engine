@@ -184,6 +184,7 @@ export type CheckTrigger = "manual" | "event" | "scheduled";
 export interface Check extends BaseEntity {
   resourceId: EntityId;
   ruleSetId: EntityId | null;
+  ruleSetRevisionId: EntityId | null;
   scheduleId: EntityId | null;
   trigger: CheckTrigger;
   triggerDetail: JsonObject;
@@ -204,6 +205,7 @@ export interface EvaluationSchedule extends BaseEntity {
   resourceId: EntityId | null;
   resourceType: string | null;
   createdByPrincipalId: EntityId | null;
+  ruleSetRevisionId: EntityId | null;
   ruleSetSnapshot: JsonObject;
   facts: JsonObject;
   intervalSeconds: number;
