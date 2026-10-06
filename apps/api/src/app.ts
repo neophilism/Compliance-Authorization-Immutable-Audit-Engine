@@ -13,6 +13,10 @@ import {
   EvidenceError,
   EvidenceService,
 } from "@caiae/evidence";
+import {
+  DeadlineError,
+  DeadlineService,
+} from "@caiae/deadlines";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -122,6 +126,103 @@ function optionalObject(
   return value as Record<string, any>;
 }
 
+function deadlineOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+function deadlineOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be a non-empty string or null`,
+    );
+  }
+  return value.trim();
+}
+
+function deadlineOptionalInteger(
+  value: unknown,
+  field: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value)) {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be a safe integer`,
+    );
+  }
+  return value as number;
+}
+
+function deadlineOptionalNullableInteger(
+  value: unknown,
+  field: string,
+): number | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (!Number.isSafeInteger(value)) {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be a safe integer or null`,
+    );
+  }
+  return value as number;
+}
+
+function deadlineOptionalNumberArray(
+  value: unknown,
+  field: string,
+): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be an array of integers`,
+    );
+  }
+
+  return value.map((item, index) => {
+    if (!Number.isSafeInteger(item)) {
+      throw new DeadlineError(
+        "validation",
+        `${field}[${index}] must be a safe integer`,
+      );
+    }
+    return item as number;
+  });
+}
+
+function deadlineOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new DeadlineError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown_error";
 }
@@ -171,6 +272,19 @@ function evidenceHttpStatus(error: EvidenceError): number {
   }
 }
 
+function deadlineHttpStatus(error: DeadlineError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -179,6 +293,7 @@ export async function buildApp() {
   const authorizations = new AuthorizationService(pool);
   const exceptions = new ExceptionService(pool);
   const evidence = new EvidenceService(pool);
+  const deadlines = new DeadlineService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -208,6 +323,15 @@ export async function buildApp() {
     if (error instanceof EvidenceError) {
       return reply
         .code(evidenceHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof DeadlineError) {
+      return reply
+        .code(deadlineHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -753,6 +877,165 @@ export async function buildApp() {
         ),
         reason: requiredString(body.reason, "reason"),
         correlationId: optionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post("/v1/deadlines", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    const record = await deadlines.create({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceId: deadlineOptionalNullableString(
+        body.resourceId,
+        "resourceId",
+      ),
+      subjectType: requiredString(
+        body.subjectType,
+        "subjectType",
+      ),
+      subjectId: requiredString(body.subjectId, "subjectId"),
+      deadlineType: requiredString(
+        body.deadlineType,
+        "deadlineType",
+      ),
+      createdByPrincipalId: deadlineOptionalNullableString(
+        body.createdByPrincipalId,
+        "createdByPrincipalId",
+      ),
+      dueAt: deadlineOptionalString(body.dueAt, "dueAt"),
+      anchorAt: deadlineOptionalString(
+        body.anchorAt,
+        "anchorAt",
+      ),
+      dueAfterSeconds: deadlineOptionalInteger(
+        body.dueAfterSeconds,
+        "dueAfterSeconds",
+      ),
+      warningWindowSeconds: deadlineOptionalInteger(
+        body.warningWindowSeconds,
+        "warningWindowSeconds",
+      ),
+      gracePeriodSeconds: deadlineOptionalInteger(
+        body.gracePeriodSeconds,
+        "gracePeriodSeconds",
+      ),
+      recurrenceIntervalSeconds:
+        deadlineOptionalNullableInteger(
+          body.recurrenceIntervalSeconds,
+          "recurrenceIntervalSeconds",
+        ),
+      recurrenceEndAt: deadlineOptionalNullableString(
+        body.recurrenceEndAt,
+        "recurrenceEndAt",
+      ),
+      maxOccurrences: deadlineOptionalNullableInteger(
+        body.maxOccurrences,
+        "maxOccurrences",
+      ),
+      escalationAfterSeconds: deadlineOptionalNumberArray(
+        body.escalationAfterSeconds,
+        "escalationAfterSeconds",
+      ),
+      metadata: deadlineOptionalObject(
+        body.metadata,
+        "metadata",
+      ),
+      correlationId: deadlineOptionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send(record);
+  });
+
+  app.get("/v1/deadlines/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return deadlines.get(id);
+  });
+
+  app.get("/v1/deadlines/:id/status", async (request) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as { at?: string };
+    const at =
+      query.at === undefined ? new Date() : new Date(query.at);
+
+    if (Number.isNaN(at.getTime())) {
+      throw new DeadlineError(
+        "validation",
+        "at must be a valid date-time",
+      );
+    }
+
+    return deadlines.statusAt(id, at);
+  });
+
+  app.get(
+    "/v1/organizations/:organizationId/subjects/:subjectType/:subjectId/deadlines",
+    async (request) => {
+      const {
+        organizationId,
+        subjectType,
+        subjectId,
+      } = request.params as {
+        organizationId: string;
+        subjectType: string;
+        subjectId: string;
+      };
+
+      return deadlines.listBySubject(
+        organizationId,
+        subjectType,
+        subjectId,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/deadlines/:id/satisfy",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return deadlines.satisfy({
+        deadlineId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        satisfiedAt: deadlineOptionalString(
+          body.satisfiedAt,
+          "satisfiedAt",
+        ),
+        correlationId: deadlineOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/deadlines/:id/cancel",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return deadlines.cancel({
+        deadlineId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: deadlineOptionalNullableString(
           body.correlationId,
           "correlationId",
         ),
