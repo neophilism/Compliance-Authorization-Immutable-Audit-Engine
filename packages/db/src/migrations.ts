@@ -172,7 +172,6 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
-}
 
   if (!versions.has("0012_security_permission_hardening")) {
     await pool.query("BEGIN");
@@ -188,6 +187,8 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+}
 
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
