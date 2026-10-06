@@ -1,3 +1,46 @@
+const OPERATOR_TOKEN_KEY =
+  "caiae.operatorToken";
+
+let operatorToken = "";
+
+export function getOperatorToken(): string {
+  if (operatorToken) {
+    return operatorToken;
+  }
+
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  operatorToken =
+    window.sessionStorage.getItem(
+      OPERATOR_TOKEN_KEY,
+    ) ?? "";
+
+  return operatorToken;
+}
+
+export function setOperatorToken(
+  token: string,
+): void {
+  operatorToken = token.trim();
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (operatorToken) {
+    window.sessionStorage.setItem(
+      OPERATOR_TOKEN_KEY,
+      operatorToken,
+    );
+  } else {
+    window.sessionStorage.removeItem(
+      OPERATOR_TOKEN_KEY,
+    );
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -13,12 +56,21 @@ export async function api<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const token =
+    getOperatorToken();
+
   const response = await fetch(
     `/engine-api${path}`,
     {
       ...init,
       headers: {
         "content-type": "application/json",
+        ...(token
+          ? {
+              authorization:
+                `Bearer ${token}`,
+            }
+          : {}),
         ...(init?.headers ?? {}),
       },
     },

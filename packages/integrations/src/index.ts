@@ -4,6 +4,13 @@ export {
 export {
   buildOpenApiDocument,
   API_ROUTE_MANIFEST,
+  apiRouteAccess,
+  apiRoutePermission,
+  findApiRoute,
+} from "./openapi.js";
+export type {
+  ApiAccessMode,
+  ApiRouteManifestEntry,
 } from "./openapi.js";
 export {
   IntegrationError,

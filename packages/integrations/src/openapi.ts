@@ -5,6 +5,11 @@ type HttpMethod =
   | "patch"
   | "delete";
 
+export type ApiAccessMode =
+  | "public"
+  | "operator"
+  | "service";
+
 export type ApiRouteManifestEntry = {
   method: HttpMethod;
   path: string;
@@ -13,6 +18,71 @@ export type ApiRouteManifestEntry = {
   integrationAuth?: boolean;
   idempotency?: boolean;
 };
+
+export function apiRouteAccess(
+  route: ApiRouteManifestEntry,
+): ApiAccessMode {
+  if (route.integrationAuth) {
+    return "service";
+  }
+
+  if (
+    route.path === "/health" ||
+    route.path === "/openapi.json" ||
+    route.path === "/v1/security/bootstrap" ||
+    route.path.startsWith("/v1/public/")
+  ) {
+    return "public";
+  }
+
+  return "operator";
+}
+
+export function apiRoutePermission(
+  route: ApiRouteManifestEntry,
+): string | null {
+  if (
+    apiRouteAccess(route) !==
+    "operator"
+  ) {
+    return null;
+  }
+
+  if (
+    route.path ===
+    "/v1/security/me"
+  ) {
+    return null;
+  }
+
+  if (
+    route.method === "post" &&
+    route.path ===
+      "/v1/organizations"
+  ) {
+    return "platform.manage";
+  }
+
+  return `${route.tag}.${
+    route.method === "get"
+      ? "read"
+      : "write"
+  }`;
+}
+
+export function findApiRoute(
+  method: string,
+  path: string,
+): ApiRouteManifestEntry | null {
+  return (
+    API_ROUTE_MANIFEST.find(
+      (route) =>
+        route.method ===
+          method.toLowerCase() &&
+        route.path === path,
+    ) ?? null
+  );
+}
 
 export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "get", path: "/health", tag: "system", summary: "Health check" },
@@ -82,6 +152,15 @@ export const API_ROUTE_MANIFEST: ApiRouteManifestEntry[] = [
   { method: "get", path: "/v1/public/certifications/verify/:code", tag: "certifications", summary: "Publicly verify certification" },
   { method: "get", path: "/v1/reports/organizations/:organizationId/compliance", tag: "reports", summary: "Generate organization compliance report" },
   { method: "get", path: "/v1/reports/organizations/:organizationId/resources/:resourceId/compliance", tag: "reports", summary: "Generate resource compliance report" },
+
+  { method: "post", path: "/v1/security/bootstrap", tag: "security", summary: "Bootstrap the first administrator credential using the deployment secret" },
+  { method: "get", path: "/v1/security/me", tag: "security", summary: "Get the authenticated operator identity and effective permissions" },
+  { method: "get", path: "/v1/security/roles", tag: "security", summary: "List organization security roles" },
+  { method: "post", path: "/v1/security/roles", tag: "security", summary: "Create an organization security role" },
+  { method: "post", path: "/v1/security/role-assignments", tag: "security", summary: "Assign a role to an active user principal" },
+  { method: "get", path: "/v1/security/operator-credentials", tag: "security", summary: "List organization operator credentials" },
+  { method: "post", path: "/v1/security/operator-credentials", tag: "security", summary: "Issue an operator credential" },
+  { method: "post", path: "/v1/security/operator-credentials/:id/revoke", tag: "security", summary: "Revoke an operator credential" },
 
   { method: "post", path: "/v1/integration/service-accounts", tag: "integration-admin", summary: "Create service account and API credential" },
   { method: "get", path: "/v1/integration/organizations/:organizationId/api-credentials", tag: "integration-admin", summary: "List organization API credentials" },
@@ -159,7 +238,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       },
     };
 
-    if (route.integrationAuth) {
+    const access =
+      apiRouteAccess(route);
+
+    if (access === "service") {
       operation.security = [
         {
           serviceBearer: [],
@@ -181,6 +263,51 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       )["403"] = {
         description: "Credential lacks required scope",
       };
+    }
+
+    if (access === "operator") {
+      operation.security = [
+        {
+          operatorBearer: [],
+        },
+      ];
+      (
+        operation.responses as Record<
+          string,
+          unknown
+        >
+      )["401"] = {
+        description:
+          "Missing, invalid, inactive, or expired operator credential",
+      };
+      (
+        operation.responses as Record<
+          string,
+          unknown
+        >
+      )["403"] = {
+        description:
+          "Operator lacks the required permission or organization access",
+      };
+    }
+
+    if (
+      route.path ===
+      "/v1/security/bootstrap"
+    ) {
+      (
+        operation.parameters as unknown[]
+      ).push({
+        name:
+          "X-CAIAE-Bootstrap-Secret",
+        in: "header",
+        required: true,
+        schema: {
+          type: "string",
+        },
+        description:
+          "Deployment bootstrap secret. Configure CAIAE_BOOTSTRAP_SECRET and rotate it after initial provisioning.",
+      });
     }
 
     if (route.idempotency) {
@@ -251,6 +378,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
       { name: "certifications" },
       { name: "reports" },
       { name: "publication" },
+      { name: "security" },
       { name: "integration-admin" },
       { name: "integration" },
       { name: "adapters" },
@@ -258,6 +386,13 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     paths,
     components: {
       securitySchemes: {
+        operatorBearer: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "CAIAE operator credential",
+          description:
+            "Human/operator token returned once at bootstrap or credential issuance. Only its SHA-256 hash is stored.",
+        },
         serviceBearer: {
           type: "http",
           scheme: "bearer",

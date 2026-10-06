@@ -30,7 +30,7 @@ Start the console:
 npm run dev -w @caiae/web
 ```
 
-Open the web application, enter an organization UUID, and select an active principal.
+Open the web application and enter a `caiau_...` operator credential. The console authenticates that credential with `GET /v1/security/me`, derives the operator's organization and principal, and binds workflow actor identity to that authenticated principal.
 
 ## Navigation
 
@@ -86,6 +86,8 @@ Inspect aggregate audit-chain verification and open the same canonical report in
 
 ## Security boundary
 
-PR 14 is a reference operator interface, not the final authentication layer.
+PR 16 protects the reference console with operator authentication, organization isolation, and role-derived permissions.
 
-PR 16 adds permission/RBAC hardening. Until then, the console explicitly selects an existing active principal and supplies that principal ID to audited workflow operations.
+The browser no longer chooses an acting principal. It stores the operator bearer credential in tab-scoped `sessionStorage`, sends it to internal APIs, and uses the authenticated principal returned by `GET /v1/security/me` for audited workflow actor fields.
+
+Machine integration routes continue to use the separate `caiae_...` service credential family and PR 13 scopes.
