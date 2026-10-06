@@ -1,0 +1,24 @@
+{
+  "resource": {
+    "resourceType": "information-system",
+    "status": "active",
+    "attributes": {
+      "environment": "production",
+      "containsSensitiveInformation": true,
+      "owner": "security-office",
+      "encryption": {
+        "atRest": {
+          "enabled": true
+        },
+        "inTransit": {
+          "enabled": true
+        },
+        "minimumTlsVersion": 1.3
+      }
+    }
+  },
+  "evidenceTypes": [
+    "encryption-configuration",
+    "transport-security-configuration"
+  ]
+}
