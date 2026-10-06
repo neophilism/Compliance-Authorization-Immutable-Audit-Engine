@@ -633,8 +633,12 @@ export class TraceabilityService {
              AND status = 'active'
              AND id <> $3
              AND (
+               $6::uuid IS NULL
+               OR id <> $6
+             )
+             AND (
                effective_to IS NULL
-               OR $4 IS NULL
+               OR $4::timestamptz IS NULL
                OR effective_to > $4
              )
              AND (
@@ -649,6 +653,7 @@ export class TraceabilityService {
             current.id,
             effectiveFrom,
             current.effectiveTo,
+            current.supersedesRuleSetId,
           ],
         );
 
@@ -683,6 +688,15 @@ export class TraceabilityService {
       if (
         current.supersedesRuleSetId
       ) {
+        const previousRow =
+          await getRuleSetRow(
+            client,
+            current.supersedesRuleSetId,
+            true,
+          );
+        const previous =
+          mapRuleSet(previousRow);
+
         await client.query(
           `UPDATE rule_sets
            SET status = 'superseded',
@@ -699,6 +713,42 @@ export class TraceabilityService {
             effectiveFrom,
           ],
         );
+
+        if (
+          previous.status === "active"
+        ) {
+          await appendAuditEventWithClient(
+            client,
+            {
+              organizationId:
+                previous.organizationId,
+              aggregateType:
+                "rule_set",
+              aggregateId:
+                previous.id,
+              eventType:
+                "rule_set.superseded",
+              actorPrincipalId:
+                principalId,
+              occurredAt:
+                activatedAt,
+              correlationId:
+                input.correlationId ??
+                null,
+              payload: {
+                key: previous.key,
+                version:
+                  previous.version,
+                definitionHash:
+                  previous.definitionHash,
+                supersededByRuleSetId:
+                  current.id,
+                effectiveTo:
+                  effectiveFrom,
+              },
+            },
+          );
+        }
       }
 
       await appendAuditEventWithClient(
