@@ -2,7 +2,10 @@
   "name": "civic-compliance-engine",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev:api": "npm run dev -w @caiae/api",
     "dev:web": "npm run dev -w @caiae/web",
@@ -12,7 +15,10 @@
     "build": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/api && npm run build -w @caiae/worker && npm run build -w @caiae/web",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "audit:verify": "npm run audit:verify -w @caiae/db --"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
