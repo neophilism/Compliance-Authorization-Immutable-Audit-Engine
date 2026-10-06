@@ -9,6 +9,10 @@ import {
   ExceptionError,
   ExceptionService,
 } from "@caiae/exceptions";
+import {
+  EvidenceError,
+  EvidenceService,
+} from "@caiae/evidence";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -154,6 +158,19 @@ function exceptionHttpStatus(error: ExceptionError): number {
   }
 }
 
+function evidenceHttpStatus(error: EvidenceError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -161,6 +178,7 @@ export async function buildApp() {
   const repository = new DomainRepository(pool);
   const authorizations = new AuthorizationService(pool);
   const exceptions = new ExceptionService(pool);
+  const evidence = new EvidenceService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -181,6 +199,15 @@ export async function buildApp() {
     if (error instanceof ExceptionError) {
       return reply
         .code(exceptionHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof EvidenceError) {
+      return reply
+        .code(evidenceHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -542,6 +569,184 @@ export async function buildApp() {
 
       return exceptions.revoke({
         exceptionId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: optionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post("/v1/evidence", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    const record = await evidence.create({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceId: requiredString(body.resourceId, "resourceId"),
+      evidenceType: requiredString(
+        body.evidenceType,
+        "evidenceType",
+      ),
+      title: requiredString(body.title, "title"),
+      submittedByPrincipalId: optionalNullableString(
+        body.submittedByPrincipalId,
+        "submittedByPrincipalId",
+      ),
+      source: optionalNullableString(body.source, "source"),
+      uri: optionalNullableString(body.uri, "uri"),
+      mediaType: optionalNullableString(
+        body.mediaType,
+        "mediaType",
+      ),
+      fileName: optionalNullableString(
+        body.fileName,
+        "fileName",
+      ),
+      checksumAlgorithm: optionalNullableString(
+        body.checksumAlgorithm,
+        "checksumAlgorithm",
+      ),
+      checksum: optionalNullableString(body.checksum, "checksum"),
+      capturedAt: optionalNullableString(
+        body.capturedAt,
+        "capturedAt",
+      ),
+      validFrom: optionalNullableString(body.validFrom, "validFrom"),
+      validUntil: optionalNullableString(
+        body.validUntil,
+        "validUntil",
+      ),
+      provenance: optionalObject(body.provenance, "provenance"),
+      supersedesEvidenceId: optionalNullableString(
+        body.supersedesEvidenceId,
+        "supersedesEvidenceId",
+      ),
+      attributes: optionalObject(body.attributes, "attributes"),
+      metadata: optionalObject(body.metadata, "metadata"),
+      correlationId: optionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send(record);
+  });
+
+  app.get("/v1/evidence/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return evidence.get(id);
+  });
+
+  app.get(
+    "/v1/organizations/:organizationId/resources/:resourceId/evidence",
+    async (request) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+      return evidence.listForResource(
+        organizationId,
+        resourceId,
+      );
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/resources/:resourceId/evidence-types",
+    async (request) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+      const query = request.query as { at?: string };
+      const at = query.at === undefined ? new Date() : new Date(query.at);
+
+      if (Number.isNaN(at.getTime())) {
+        throw new EvidenceError(
+          "validation",
+          "at must be a valid date-time",
+        );
+      }
+
+      return {
+        evidenceTypes: await evidence.validEvidenceTypes(
+          organizationId,
+          resourceId,
+          at,
+        ),
+      };
+    },
+  );
+
+  app.post(
+    "/v1/evidence/:id/attestations",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return evidence.addAttestation({
+        evidenceId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        attestationType: requiredString(
+          body.attestationType,
+          "attestationType",
+        ),
+        statement: requiredString(
+          body.statement,
+          "statement",
+        ),
+        claims: optionalObject(body.claims, "claims"),
+        attestedAt: optionalString(body.attestedAt, "attestedAt"),
+        validUntil: optionalNullableString(
+          body.validUntil,
+          "validUntil",
+        ),
+        metadata: optionalObject(body.metadata, "metadata"),
+        correlationId: optionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post("/v1/evidence/:id/revoke", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    return evidence.revoke({
+      evidenceId: id,
+      principalId: requiredString(
+        body.principalId,
+        "principalId",
+      ),
+      reason: requiredString(body.reason, "reason"),
+      correlationId: optionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+  });
+
+  app.post(
+    "/v1/evidence-attestations/:id/revoke",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return evidence.revokeAttestation({
+        attestationId: id,
         principalId: requiredString(
           body.principalId,
           "principalId",
