@@ -1129,6 +1129,11 @@ export async function buildApp(
 
       const routePath =
         request.routeOptions.url;
+
+      if (!routePath) {
+        return;
+      }
+
       const route = findApiRoute(
         request.method,
         routePath,
