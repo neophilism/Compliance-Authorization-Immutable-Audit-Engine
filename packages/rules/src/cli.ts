@@ -1,19 +1,27 @@
 import { readFile } from "node:fs/promises";
-import { extname } from "node:path";
+import { extname, isAbsolute, resolve } from "node:path";
 import {
   evaluateRuleSet,
   parseEvaluationContext,
   parseRuleSetText,
 } from "./index.js";
 
-const [ruleSetPath, contextPath] = process.argv.slice(2);
+const [ruleSetArgument, contextArgument] = process.argv.slice(2);
 
-if (!ruleSetPath || !contextPath) {
+if (!ruleSetArgument || !contextArgument) {
   console.error(
     "usage: npm run rules:evaluate -- <ruleset.yaml|json> <context.json>",
   );
   process.exitCode = 2;
 } else {
+  const invocationDirectory = process.env.INIT_CWD ?? process.cwd();
+  const ruleSetPath = isAbsolute(ruleSetArgument)
+    ? ruleSetArgument
+    : resolve(invocationDirectory, ruleSetArgument);
+  const contextPath = isAbsolute(contextArgument)
+    ? contextArgument
+    : resolve(invocationDirectory, contextArgument);
+
   const extension = extname(ruleSetPath).toLowerCase();
   const format =
     extension === ".yaml" || extension === ".yml"
