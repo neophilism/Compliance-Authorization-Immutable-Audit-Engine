@@ -54,6 +54,20 @@ test("production runtime is secure by default", () => {
     config.trustProxy,
     true,
   );
+
+  const bootstrapDisabled =
+    readApiRuntimeConfig({
+      NODE_ENV: "production",
+      DATABASE_URL,
+      CAIAE_WEBHOOK_MASTER_SECRET:
+        "x".repeat(64),
+      CAIAE_BOOTSTRAP_SECRET: "",
+    });
+
+  assert.equal(
+    bootstrapDisabled.environment,
+    "production",
+  );
 });
 
 test("production rejects legacy security, wildcard CORS, and weak secrets", () => {
