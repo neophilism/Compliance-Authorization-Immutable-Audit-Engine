@@ -847,3 +847,294 @@ test("operator client exposes emergency authorization lifecycle methods", async 
     /\/revoke$/,
   );
 });
+
+
+test("operator client exposes typed deadline lifecycle methods", async () => {
+  const calls:
+    Array<{
+      url: string;
+      init?: RequestInit;
+    }> = [];
+  const deadlineId =
+    "55555555-5555-4555-8555-555555555555";
+  const resourceId =
+    "22222222-2222-4222-8222-222222222222";
+  const deadline = {
+    id: deadlineId,
+    organizationId: ORG,
+    resourceId,
+    subjectType:
+      "statutory-obligation",
+    subjectId:
+      "agency/implementation",
+    deadlineType:
+      "implementation",
+    status:
+      "scheduled",
+    createdByPrincipalId:
+      "operator-principal",
+    anchorAt:
+      "2026-10-06T17:00:00.000Z",
+    dueOffsetSeconds:
+      15552000,
+    dueAt:
+      "2027-04-04T17:00:00.000Z",
+    warningWindowSeconds:
+      604800,
+    gracePeriodSeconds:
+      0,
+    recurrenceIntervalSeconds:
+      null,
+    recurrenceEndAt:
+      null,
+    maxOccurrences:
+      null,
+    cycleNumber:
+      1,
+    escalationAfterSeconds: [
+      86400,
+    ],
+    escalationLevel:
+      0,
+    satisfiedAt:
+      null,
+    createdAt:
+      "2026-10-06T17:00:00.000Z",
+    updatedAt:
+      "2026-10-06T17:00:00.000Z",
+    metadata: {},
+  };
+  const view = {
+    deadline,
+    clock: {
+      status:
+        "scheduled",
+      escalationLevel:
+        0,
+      warningAt:
+        "2027-03-28T17:00:00.000Z",
+      dueAt:
+        deadline.dueAt,
+      overdueAt:
+        deadline.dueAt,
+    },
+    occurrences: [],
+  };
+
+  const client =
+    createOperatorClient({
+      baseUrl:
+        "https://engine.example",
+      organizationId:
+        ORG,
+      token:
+        "caiau_operator_secret",
+      transport: {
+        fetchImpl:
+          async (
+            input,
+            init,
+          ) => {
+            const url =
+              String(input);
+            calls.push({
+              url,
+              init,
+            });
+
+            if (
+              url.includes(
+                "/status",
+              )
+            ) {
+              return new Response(
+                JSON.stringify({
+                  status:
+                    "scheduled",
+                  escalationLevel:
+                    0,
+                  warningAt:
+                    "2027-03-28T17:00:00.000Z",
+                  dueAt:
+                    deadline.dueAt,
+                  overdueAt:
+                    deadline.dueAt,
+                }),
+                {
+                  status:
+                    200,
+                  headers: {
+                    "content-type":
+                      "application/json",
+                  },
+                },
+              );
+            }
+
+            if (
+              url.includes(
+                "/subjects/",
+              )
+            ) {
+              return new Response(
+                JSON.stringify([
+                  deadline,
+                ]),
+                {
+                  status:
+                    200,
+                  headers: {
+                    "content-type":
+                      "application/json",
+                  },
+                },
+              );
+            }
+
+            return new Response(
+              JSON.stringify(view),
+              {
+                status:
+                  init?.method ===
+                    "POST" &&
+                  url.endsWith(
+                    "/v1/deadlines",
+                  )
+                    ? 201
+                    : 200,
+                headers: {
+                  "content-type":
+                    "application/json",
+                },
+              },
+            );
+          },
+      },
+    });
+
+  const created =
+    await client.createDeadline({
+      resourceId,
+      subjectType:
+        "statutory-obligation",
+      subjectId:
+        "agency/implementation",
+      deadlineType:
+        "implementation",
+      createdByPrincipalId:
+        "operator-principal",
+      anchorAt:
+        "2026-10-06T17:00:00.000Z",
+      dueAfterSeconds:
+        15552000,
+      warningWindowSeconds:
+        604800,
+      escalationAfterSeconds: [
+        86400,
+      ],
+      correlationId:
+        "sdk-deadline-create",
+    });
+  assert.equal(
+    created.deadline.id,
+    deadlineId,
+  );
+
+  await client.getDeadline(
+    deadlineId,
+  );
+
+  const status =
+    await client.getDeadlineStatus(
+      deadlineId,
+      "2027-03-01T12:00:00.000Z",
+    );
+  assert.equal(
+    status.status,
+    "scheduled",
+  );
+
+  const listed =
+    await client.listDeadlinesBySubject(
+      "statutory-obligation",
+      "agency/implementation",
+    );
+  assert.equal(
+    listed.length,
+    1,
+  );
+
+  await client.satisfyDeadline(
+    deadlineId,
+    {
+      principalId:
+        "operator-principal",
+      satisfiedAt:
+        "2027-04-01T12:00:00.000Z",
+      correlationId:
+        "sdk-deadline-satisfy",
+    },
+  );
+
+  await client.cancelDeadline(
+    deadlineId,
+    {
+      principalId:
+        "operator-principal",
+      reason:
+        "Superseded by corrected schedule",
+      correlationId:
+        "sdk-deadline-cancel",
+    },
+  );
+
+  assert.equal(
+    calls.length,
+    6,
+  );
+
+  const createBody =
+    JSON.parse(
+      String(
+        calls[0]!.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    createBody.organizationId,
+    ORG,
+  );
+  assert.equal(
+    createBody.deadlineType,
+    "implementation",
+  );
+  assert.equal(
+    createBody.correlationId,
+    "sdk-deadline-create",
+  );
+
+  assert.match(
+    calls[2]!.url,
+    /\/status\?at=2027-03-01T12%3A00%3A00\.000Z$/,
+  );
+  assert.match(
+    calls[3]!.url,
+    /\/subjects\/statutory-obligation\/agency%2Fimplementation\/deadlines$/,
+  );
+  assert.equal(
+    calls[4]!.init?.method,
+    "POST",
+  );
+  assert.match(
+    calls[4]!.url,
+    /\/satisfy$/,
+  );
+  assert.equal(
+    calls[5]!.init?.method,
+    "POST",
+  );
+  assert.match(
+    calls[5]!.url,
+    /\/cancel$/,
+  );
+});
