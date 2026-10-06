@@ -69,6 +69,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
   }
 }
 
+  if (!versions.has("0005_evidence_attestations")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(EVIDENCE_ATTESTATIONS_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0005_evidence_attestations"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
   id uuid PRIMARY KEY,
@@ -530,4 +545,65 @@ CREATE INDEX IF NOT EXISTS exception_decisions_exception_idx
 CREATE INDEX IF NOT EXISTS exceptions_expiration_idx
   ON exceptions(status, valid_until)
   WHERE status IN ('requested', 'approved');
+`;
+
+
+const EVIDENCE_ATTESTATIONS_SQL = `
+ALTER TABLE evidence
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active',
+  ADD COLUMN IF NOT EXISTS submitted_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS media_type text,
+  ADD COLUMN IF NOT EXISTS file_name text,
+  ADD COLUMN IF NOT EXISTS checksum_algorithm text,
+  ADD COLUMN IF NOT EXISTS valid_from timestamptz,
+  ADD COLUMN IF NOT EXISTS provenance jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS supersedes_evidence_id uuid REFERENCES evidence(id),
+  ADD COLUMN IF NOT EXISTS superseded_at timestamptz;
+
+ALTER TABLE evidence
+  DROP CONSTRAINT IF EXISTS evidence_status_valid;
+
+ALTER TABLE evidence
+  ADD CONSTRAINT evidence_status_valid
+  CHECK (status IN ('active', 'superseded', 'revoked'));
+
+ALTER TABLE evidence
+  DROP CONSTRAINT IF EXISTS evidence_validity_window;
+
+ALTER TABLE evidence
+  ADD CONSTRAINT evidence_validity_window
+  CHECK (
+    valid_until IS NULL
+    OR valid_from IS NULL
+    OR valid_until > valid_from
+  );
+
+CREATE INDEX IF NOT EXISTS evidence_resource_type_status_idx
+  ON evidence(organization_id, resource_id, evidence_type, status);
+
+CREATE INDEX IF NOT EXISTS evidence_validity_idx
+  ON evidence(resource_id, valid_from, valid_until)
+  WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS evidence_attestations (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  evidence_id uuid NOT NULL REFERENCES evidence(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  attestation_type text NOT NULL,
+  statement text NOT NULL,
+  claims jsonb NOT NULL DEFAULT '{}'::jsonb,
+  attested_at timestamptz NOT NULL,
+  valid_until timestamptz,
+  revoked_at timestamptz,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS evidence_attestations_evidence_idx
+  ON evidence_attestations(evidence_id, attested_at);
+
+CREATE INDEX IF NOT EXISTS evidence_attestations_validity_idx
+  ON evidence_attestations(evidence_id, valid_until, revoked_at);
 `;
