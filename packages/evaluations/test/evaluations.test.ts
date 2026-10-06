@@ -89,7 +89,7 @@ async function fixture() {
 
   await evidence.create({
     organizationId,
-    failingResourceId,
+    resourceId: failingResourceId,
     evidenceType: "encryption-configuration",
     title: "Encryption Configuration",
     submittedByPrincipalId: principalId,
