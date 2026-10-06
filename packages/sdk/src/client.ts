@@ -1,7 +1,12 @@
 import type {
   AuthorizationEffectiveness,
   AuthorizationRecord,
+  CancelDeadlineInput,
   ComplianceReport,
+  CreateDeadlineInput,
+  Deadline,
+  DeadlineStatusSnapshot,
+  DeadlineView,
   ExceptionEffectiveness,
   ExceptionRecordView,
   Paginated,
@@ -20,6 +25,7 @@ import type {
   SdkClientOptions,
   SdkRequestOptions,
   SdkResponse,
+  SatisfyDeadlineInput,
   UpdateResourceInput,
 } from "./types.js";
 import { SdkError } from "./types.js";
@@ -413,6 +419,105 @@ export class ComplianceEngineClient {
         ExceptionRecordView
       >(
         `/v1/exceptions/${encodeURIComponent(exceptionId)}/revoke`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async createDeadline(
+    input: CreateDeadlineInput,
+  ): Promise<DeadlineView> {
+    return (
+      await this.request<
+        DeadlineView
+      >(
+        "/v1/deadlines",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getDeadline(
+    deadlineId: string,
+  ): Promise<DeadlineView> {
+    return (
+      await this.request<
+        DeadlineView
+      >(
+        `/v1/deadlines/${encodeURIComponent(deadlineId)}`,
+      )
+    ).data;
+  }
+
+  async getDeadlineStatus(
+    deadlineId: string,
+    at?: string,
+  ): Promise<DeadlineStatusSnapshot> {
+    return (
+      await this.request<
+        DeadlineStatusSnapshot
+      >(
+        `/v1/deadlines/${encodeURIComponent(deadlineId)}/status`,
+        {
+          query: {
+            at,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async listDeadlinesBySubject(
+    subjectType: string,
+    subjectId: string,
+  ): Promise<Deadline[]> {
+    const organizationId =
+      this.requireOrganizationId();
+    return (
+      await this.request<
+        Deadline[]
+      >(
+        `/v1/organizations/${organizationId}/subjects/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}/deadlines`,
+      )
+    ).data;
+  }
+
+  async satisfyDeadline(
+    deadlineId: string,
+    input: SatisfyDeadlineInput,
+  ): Promise<DeadlineView> {
+    return (
+      await this.request<
+        DeadlineView
+      >(
+        `/v1/deadlines/${encodeURIComponent(deadlineId)}/satisfy`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async cancelDeadline(
+    deadlineId: string,
+    input: CancelDeadlineInput,
+  ): Promise<DeadlineView> {
+    return (
+      await this.request<
+        DeadlineView
+      >(
+        `/v1/deadlines/${encodeURIComponent(deadlineId)}/cancel`,
         {
           method: "POST",
           body: input,
