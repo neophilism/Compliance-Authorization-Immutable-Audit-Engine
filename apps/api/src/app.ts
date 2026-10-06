@@ -1134,13 +1134,6 @@ export async function buildApp(
       true,
   });
 
-  app.addHook(
-    "onClose",
-    async () => {
-      await pool.end();
-    },
-  );
-
   async function lookupOrganizationById(
     table: string,
     id: string,
