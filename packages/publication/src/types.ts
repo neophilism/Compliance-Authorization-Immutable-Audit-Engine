@@ -1,6 +1,7 @@
 import type {
   JsonObject,
   JsonValue,
+  Resource,
 } from "@caiae/core";
 
 export type PublicationState =
@@ -120,7 +121,7 @@ export type ResourceComplianceProjection = {
     resourceType: string;
     name: string;
     externalRef: string | null;
-    status: string;
+    status: Resource["status"];
   };
   latestCheck: {
     id: string;
