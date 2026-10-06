@@ -54,6 +54,22 @@ export async function runMigrations(pool: Pool): Promise<void> {
   }
 }
 
+  if (!versions.has("0004_exceptions_waivers")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(EXCEPTIONS_WAIVERS_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0004_exceptions_waivers"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
   id uuid PRIMARY KEY,
@@ -449,4 +465,70 @@ CREATE INDEX IF NOT EXISTS authorizations_emergency_review_idx
   WHERE emergency = true
     AND status = 'approved'
     AND emergency_reviewed_at IS NULL;
+`;
+
+
+const EXCEPTIONS_WAIVERS_SQL = `
+ALTER TABLE exceptions
+  ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'exception',
+  ADD COLUMN IF NOT EXISTS requested_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS decided_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS requested_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS decided_at timestamptz,
+  ADD COLUMN IF NOT EXISTS scope jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS approval_quorum integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS approval_authority text;
+
+ALTER TABLE exceptions
+  DROP CONSTRAINT IF EXISTS exceptions_kind_valid;
+
+ALTER TABLE exceptions
+  ADD CONSTRAINT exceptions_kind_valid
+  CHECK (kind IN ('exception', 'waiver'));
+
+ALTER TABLE exceptions
+  DROP CONSTRAINT IF EXISTS exceptions_approval_quorum_positive;
+
+ALTER TABLE exceptions
+  ADD CONSTRAINT exceptions_approval_quorum_positive
+  CHECK (approval_quorum > 0);
+
+ALTER TABLE exceptions
+  DROP CONSTRAINT IF EXISTS exceptions_validity_bounded;
+
+ALTER TABLE exceptions
+  ADD CONSTRAINT exceptions_validity_bounded
+  CHECK (
+    valid_until IS NOT NULL
+    AND valid_until > COALESCE(valid_from, requested_at)
+  );
+
+CREATE TABLE IF NOT EXISTS exception_decisions (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  exception_id uuid NOT NULL REFERENCES exceptions(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  decision text NOT NULL CHECK (decision IN ('approve', 'deny')),
+  rationale text NOT NULL DEFAULT '',
+  decided_at timestamptz NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (exception_id, principal_id)
+);
+
+CREATE TABLE IF NOT EXISTS exception_eligible_approvers (
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  exception_id uuid NOT NULL REFERENCES exceptions(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (exception_id, principal_id)
+);
+
+CREATE INDEX IF NOT EXISTS exception_decisions_exception_idx
+  ON exception_decisions(exception_id, decided_at);
+
+CREATE INDEX IF NOT EXISTS exceptions_expiration_idx
+  ON exceptions(status, valid_until)
+  WHERE status IN ('requested', 'approved');
 `;
