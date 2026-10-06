@@ -2836,6 +2836,26 @@ export async function buildApp(
       ),
       resourceId: requiredString(body.resourceId, "resourceId"),
       ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      ruleSetRevisionId:
+        evaluationOptionalNullableString(
+          body.ruleSetRevisionId,
+          "ruleSetRevisionId",
+        ),
+      ruleSetRevisionId:
+        evaluationOptionalNullableString(
+          body.ruleSetRevisionId,
+          "ruleSetRevisionId",
+        ),
+      ruleSetRevisionId:
+        evaluationOptionalNullableString(
+          body.ruleSetRevisionId,
+          "ruleSetRevisionId",
+        ),
+      ruleSetRevisionId:
+        evaluationOptionalNullableString(
+          body.ruleSetRevisionId,
+          "ruleSetRevisionId",
+        ),
       requestedByPrincipalId: evaluationOptionalNullableString(
         body.requestedByPrincipalId,
         "requestedByPrincipalId",
