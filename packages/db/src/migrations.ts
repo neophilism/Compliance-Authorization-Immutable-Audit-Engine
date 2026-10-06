@@ -127,6 +127,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0009_certification_engine")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(CERTIFICATION_ENGINE_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0009_certification_engine"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -864,4 +879,67 @@ WHERE created_by_principal_id IS NULL
 
 CREATE INDEX IF NOT EXISTS remediations_finding_status_idx
   ON remediations(finding_id, status, created_at);
+`;
+
+
+const CERTIFICATION_ENGINE_SQL = `
+ALTER TABLE certifications
+  DROP CONSTRAINT IF EXISTS certifications_status_check;
+
+ALTER TABLE certifications
+  ADD CONSTRAINT certifications_status_check
+  CHECK (
+    status IN (
+      'pending',
+      'active',
+      'suspended',
+      'revoked',
+      'expired',
+      'superseded'
+    )
+  );
+
+ALTER TABLE certifications
+  ADD COLUMN IF NOT EXISTS supporting_check_id uuid REFERENCES checks(id),
+  ADD COLUMN IF NOT EXISTS certificate_number text,
+  ADD COLUMN IF NOT EXISTS verification_code text,
+  ADD COLUMN IF NOT EXISTS issued_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS valid_from timestamptz,
+  ADD COLUMN IF NOT EXISTS criteria jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS artifact jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS public_artifact jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS suspended_at timestamptz,
+  ADD COLUMN IF NOT EXISTS suspended_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS suspension_reason text,
+  ADD COLUMN IF NOT EXISTS suspension_check_id uuid REFERENCES checks(id),
+  ADD COLUMN IF NOT EXISTS reinstated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS reinstated_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS reinstatement_check_id uuid REFERENCES checks(id),
+  ADD COLUMN IF NOT EXISTS revoked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS revoked_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS revocation_reason text,
+  ADD COLUMN IF NOT EXISTS renewed_from_certification_id uuid REFERENCES certifications(id),
+  ADD COLUMN IF NOT EXISTS superseded_at timestamptz,
+  ADD COLUMN IF NOT EXISTS superseded_by_certification_id uuid REFERENCES certifications(id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS certifications_certificate_number_unique_idx
+  ON certifications(certificate_number)
+  WHERE certificate_number IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS certifications_verification_code_unique_idx
+  ON certifications(verification_code)
+  WHERE verification_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS certifications_resource_status_idx
+  ON certifications(organization_id, resource_id, status);
+
+CREATE INDEX IF NOT EXISTS certifications_valid_until_idx
+  ON certifications(valid_until, status)
+  WHERE status IN ('pending', 'active', 'suspended');
+
+CREATE INDEX IF NOT EXISTS certifications_supporting_check_idx
+  ON certifications(supporting_check_id);
+
+CREATE INDEX IF NOT EXISTS certifications_renewed_from_idx
+  ON certifications(renewed_from_certification_id);
 `;
