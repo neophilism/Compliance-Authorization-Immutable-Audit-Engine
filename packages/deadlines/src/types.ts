@@ -62,6 +62,14 @@ export type DeadlineClockState = {
   overdueAt: string;
 };
 
+export type DeadlineStatusSnapshot = {
+  status: DeadlineStatus;
+  escalationLevel: number;
+  warningAt: string;
+  dueAt: string;
+  overdueAt: string;
+};
+
 export type DeadlineView = {
   deadline: Deadline;
   clock: DeadlineClockState | null;
