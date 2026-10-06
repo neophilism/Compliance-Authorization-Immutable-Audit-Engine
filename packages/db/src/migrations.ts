@@ -846,6 +846,7 @@ CREATE INDEX IF NOT EXISTS findings_resource_status_idx
   ON findings(organization_id, resource_id, status);
 
 ALTER TABLE remediations
+  ADD COLUMN IF NOT EXISTS deadline_id uuid REFERENCES deadlines(id),
   ADD COLUMN IF NOT EXISTS created_by_principal_id uuid REFERENCES principals(id),
   ADD COLUMN IF NOT EXISTS started_at timestamptz,
   ADD COLUMN IF NOT EXISTS verified_at timestamptz,
