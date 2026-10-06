@@ -194,6 +194,8 @@ export interface Check extends BaseEntity {
   completedAt: ISODateTime | null;
   evaluatedAt: ISODateTime | null;
   ruleSetSnapshot: JsonObject;
+  ruleSetHash: string | null;
+  ruleSetProvenance: JsonObject;
   contextSnapshot: JsonObject;
   evidenceTrace: JsonObject[];
   result: JsonObject;
@@ -204,7 +206,10 @@ export interface EvaluationSchedule extends BaseEntity {
   resourceId: EntityId | null;
   resourceType: string | null;
   createdByPrincipalId: EntityId | null;
+  registeredRuleSetId: EntityId | null;
   ruleSetSnapshot: JsonObject;
+  ruleSetHash: string | null;
+  ruleSetProvenance: JsonObject;
   facts: JsonObject;
   intervalSeconds: number;
   nextRunAt: ISODateTime;
