@@ -2036,11 +2036,39 @@ export async function buildApp(
   app.post("/v1/resources", async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const attributes =
-      body.attributes &&
-      typeof body.attributes === "object" &&
-      !Array.isArray(body.attributes)
-        ? (body.attributes as Record<string, any>)
-        : {};
+      optionalObject(
+        body.attributes,
+        "attributes",
+      ) ?? {};
+    const metadata =
+      optionalObject(
+        body.metadata,
+        "metadata",
+      ) ?? {};
+    const status =
+      body.status ===
+      undefined
+        ? undefined
+        : requiredString(
+            body.status,
+            "status",
+          );
+
+    if (
+      status !== undefined &&
+      status !== "active" &&
+      status !== "inactive" &&
+      status !== "archived"
+    ) {
+      return reply
+        .code(400)
+        .send({
+          error:
+            "validation",
+          message:
+            "status must be active, inactive, or archived",
+        });
+    }
 
     const resource = await repository.createResource({
       organizationId: requiredString(
@@ -2053,8 +2081,13 @@ export async function buildApp(
       ),
       name: requiredString(body.name, "name"),
       externalRef:
-        typeof body.externalRef === "string" ? body.externalRef : null,
+        optionalNullableString(
+          body.externalRef,
+          "externalRef",
+        ) ?? null,
+      status,
       attributes,
+      metadata,
     });
     return reply.code(201).send(resource);
   });
