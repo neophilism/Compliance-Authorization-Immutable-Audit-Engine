@@ -1,8 +1,18 @@
 import type {
+  AuthorizationEffectiveness,
+  AuthorizationRecord,
   ComplianceReport,
+  ExceptionEffectiveness,
+  ExceptionRecordView,
   Paginated,
+  RecordAuthorizationDecisionInput,
+  RecordExceptionDecisionInput,
   RegisteredRuleSetSummary,
   RegistryComplianceProjection,
+  RequestAuthorizationInput,
+  RequestExceptionInput,
+  RevokeAuthorizationInput,
+  RevokeExceptionInput,
   Resource,
   ResourceListOptions,
   RunCheckInput,
@@ -235,6 +245,176 @@ export class ComplianceEngineClient {
         `/v1/resources/${encodeURIComponent(resourceId)}`,
         {
           method: "PATCH",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async requestAuthorization(
+    input: RequestAuthorizationInput,
+  ): Promise<AuthorizationRecord> {
+    return (
+      await this.request<
+        AuthorizationRecord
+      >(
+        "/v1/authorizations",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getAuthorization(
+    authorizationId: string,
+  ): Promise<AuthorizationRecord> {
+    return (
+      await this.request<
+        AuthorizationRecord
+      >(
+        `/v1/authorizations/${encodeURIComponent(authorizationId)}`,
+      )
+    ).data;
+  }
+
+  async getAuthorizationEffectiveness(
+    authorizationId: string,
+    at?: string,
+  ): Promise<AuthorizationEffectiveness> {
+    return (
+      await this.request<
+        AuthorizationEffectiveness
+      >(
+        `/v1/authorizations/${encodeURIComponent(authorizationId)}/effectiveness`,
+        {
+          query: {
+            at,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async recordAuthorizationDecision(
+    authorizationId: string,
+    input:
+      RecordAuthorizationDecisionInput,
+  ): Promise<AuthorizationRecord> {
+    return (
+      await this.request<
+        AuthorizationRecord
+      >(
+        `/v1/authorizations/${encodeURIComponent(authorizationId)}/decisions`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async revokeAuthorization(
+    authorizationId: string,
+    input: RevokeAuthorizationInput,
+  ): Promise<AuthorizationRecord> {
+    return (
+      await this.request<
+        AuthorizationRecord
+      >(
+        `/v1/authorizations/${encodeURIComponent(authorizationId)}/revoke`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async requestException(
+    input: RequestExceptionInput,
+  ): Promise<ExceptionRecordView> {
+    return (
+      await this.request<
+        ExceptionRecordView
+      >(
+        "/v1/exceptions",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getException(
+    exceptionId: string,
+  ): Promise<ExceptionRecordView> {
+    return (
+      await this.request<
+        ExceptionRecordView
+      >(
+        `/v1/exceptions/${encodeURIComponent(exceptionId)}`,
+      )
+    ).data;
+  }
+
+  async getExceptionEffectiveness(
+    exceptionId: string,
+    at?: string,
+  ): Promise<ExceptionEffectiveness> {
+    return (
+      await this.request<
+        ExceptionEffectiveness
+      >(
+        `/v1/exceptions/${encodeURIComponent(exceptionId)}/effectiveness`,
+        {
+          query: {
+            at,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async recordExceptionDecision(
+    exceptionId: string,
+    input:
+      RecordExceptionDecisionInput,
+  ): Promise<ExceptionRecordView> {
+    return (
+      await this.request<
+        ExceptionRecordView
+      >(
+        `/v1/exceptions/${encodeURIComponent(exceptionId)}/decisions`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async revokeException(
+    exceptionId: string,
+    input: RevokeExceptionInput,
+  ): Promise<ExceptionRecordView> {
+    return (
+      await this.request<
+        ExceptionRecordView
+      >(
+        `/v1/exceptions/${encodeURIComponent(exceptionId)}/revoke`,
+        {
+          method: "POST",
           body: input,
         },
       )

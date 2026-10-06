@@ -73,3 +73,18 @@ The lifecycle currently emits:
 - `authorization.emergency_review_overdue`
 
 All events participate in the tamper-evident aggregate hash chain.
+
+
+## SDK access
+
+Thin applications should use the typed `@caiae/sdk` authorization lifecycle instead of importing the authorization service or database layer.
+
+The SDK exposes:
+
+- `requestAuthorization()`;
+- `getAuthorization()`;
+- `getAuthorizationEffectiveness()`;
+- `recordAuthorizationDecision()`;
+- `revokeAuthorization()`.
+
+This includes emergency authorizations, whose generic engine lifecycle supports immediate effectiveness, a mandatory review deadline, post-emergency approval/denial, automatic loss of effectiveness when review becomes overdue, and revocation/expiration.

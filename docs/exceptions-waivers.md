@@ -68,3 +68,18 @@ Event names retain the record kind, including:
 - `*.expired`
 
 The aggregate type remains `exception` so both kinds use the same tamper-evident chain model.
+
+
+## SDK access
+
+Thin applications should use the typed `@caiae/sdk` exception lifecycle rather than importing the exceptions service or database layer directly.
+
+The SDK exposes:
+
+- `requestException()`;
+- `getException()`;
+- `getExceptionEffectiveness()`;
+- `recordExceptionDecision()`;
+- `revokeException()`.
+
+These methods preserve organization scoping at request creation and keep downstream applications on the public engine boundary.
