@@ -25,6 +25,7 @@ export class AuthorizationService {
     validateRequest(input);
 
     const client = await this.pool.connect();
+    let authorizationId = "";
     try {
       await client.query("BEGIN");
 
@@ -85,7 +86,7 @@ export class AuthorizationService {
         emergencyReviewDueAt,
       });
 
-      const authorizationId = randomUUID();
+      authorizationId = randomUUID();
       const initialStatus = emergency ? "approved" : "pending";
       const effectiveValidFrom =
         emergency && validFrom === null ? requestedAt : validFrom;
@@ -182,13 +183,14 @@ export class AuthorizationService {
       }
 
       await client.query("COMMIT");
-      return this.get(authorizationId);
     } catch (error) {
       await client.query("ROLLBACK");
       throw normalizePgError(error);
     } finally {
       client.release();
     }
+
+    return this.get(authorizationId);
   }
 
   async get(authorizationId: string): Promise<AuthorizationRecord> {
@@ -422,13 +424,14 @@ export class AuthorizationService {
       }
 
       await client.query("COMMIT");
-      return this.get(input.authorizationId);
     } catch (error) {
       await client.query("ROLLBACK");
       throw normalizePgError(error);
     } finally {
       client.release();
     }
+
+    return this.get(input.authorizationId);
   }
 
   async revoke(
@@ -484,13 +487,14 @@ export class AuthorizationService {
       });
 
       await client.query("COMMIT");
-      return this.get(input.authorizationId);
     } catch (error) {
       await client.query("ROLLBACK");
       throw normalizePgError(error);
     } finally {
       client.release();
     }
+
+    return this.get(input.authorizationId);
   }
 
   async effectiveness(
