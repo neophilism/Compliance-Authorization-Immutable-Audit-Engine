@@ -39,11 +39,23 @@ test("core domain can be created and retrieved through the API", async () => {
         organizationId: organization.id,
         resourceType: "information-system",
         name: "API Test System",
+        status: "active",
         attributes: { environment: "test" },
+        metadata: {
+          source: "domain-api-test",
+        },
       },
     });
     assert.equal(resourceResponse.statusCode, 201);
     const resource = resourceResponse.json();
+    assert.equal(
+      resource.status,
+      "active",
+    );
+    assert.equal(
+      resource.metadata.source,
+      "domain-api-test",
+    );
 
     const getResponse = await app.inject({
       method: "GET",
