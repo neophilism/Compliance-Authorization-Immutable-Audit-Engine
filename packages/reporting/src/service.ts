@@ -1,9 +1,11 @@
 import type { Pool } from "pg";
 import type {
   AuditEvent,
+  Deadline,
   JsonObject,
 } from "@caiae/core";
 import { verifyAuditChain } from "@caiae/db";
+import { calculateDeadlineClock } from "@caiae/deadlines";
 import {
   ReportingError,
   type AuditChainReport,
@@ -581,22 +583,74 @@ function mapDeadline(
   row: any,
   asOf: Date,
 ): ReportDeadline {
+  const deadline =
+    mapDeadlineEntity(row);
+  const clock =
+    deadline.status === "satisfied" ||
+    deadline.status === "cancelled"
+      ? null
+      : calculateDeadlineClock(
+          deadline,
+          asOf,
+        );
+
+  return {
+    id: deadline.id,
+    resourceId:
+      deadline.resourceId,
+    subjectType:
+      deadline.subjectType,
+    subjectId:
+      deadline.subjectId,
+    deadlineType:
+      deadline.deadlineType,
+    storedStatus:
+      deadline.status,
+    effectiveStatus:
+      clock?.status ??
+      deadline.status,
+    dueAt: deadline.dueAt,
+    satisfiedAt:
+      deadline.satisfiedAt,
+    warningWindowSeconds:
+      deadline.warningWindowSeconds,
+    gracePeriodSeconds:
+      deadline.gracePeriodSeconds,
+    escalationLevel:
+      clock?.escalationLevel ??
+      deadline.escalationLevel,
+    cycleNumber:
+      deadline.cycleNumber,
+  };
+}
+
+function mapDeadlineEntity(
+  row: any,
+): Deadline {
   return {
     id: row.id,
+    organizationId:
+      row.organization_id,
     resourceId:
       row.resource_id ?? null,
     subjectType: row.subject_type,
     subjectId: row.subject_id,
-    deadlineType: row.deadline_type,
-    storedStatus: row.status,
-    effectiveStatus:
-      effectiveDeadlineStatus(
-        row,
-        asOf,
-      ),
+    deadlineType:
+      row.deadline_type,
+    status: row.status,
+    createdByPrincipalId:
+      row.created_by_principal_id ??
+      null,
+    anchorAt:
+      nullableIso(row.anchor_at),
+    dueOffsetSeconds:
+      row.due_offset_seconds === null ||
+      row.due_offset_seconds === undefined
+        ? null
+        : Number(
+            row.due_offset_seconds,
+          ),
     dueAt: iso(row.due_at),
-    satisfiedAt:
-      nullableIso(row.satisfied_at),
     warningWindowSeconds:
       Number(
         row.warning_window_seconds ??
@@ -607,12 +661,51 @@ function mapDeadline(
         row.grace_period_seconds ??
           0,
       ),
+    recurrenceIntervalSeconds:
+      row.recurrence_interval_seconds ===
+        null ||
+      row.recurrence_interval_seconds ===
+        undefined
+        ? null
+        : Number(
+            row.recurrence_interval_seconds,
+          ),
+    recurrenceEndAt:
+      nullableIso(
+        row.recurrence_end_at,
+      ),
+    maxOccurrences:
+      row.max_occurrences === null ||
+      row.max_occurrences === undefined
+        ? null
+        : Number(
+            row.max_occurrences,
+          ),
+    cycleNumber:
+      Number(row.cycle_number ?? 1),
+    escalationAfterSeconds:
+      Array.isArray(
+        row.escalation_after_seconds,
+      )
+        ? row.escalation_after_seconds.map(
+            (value: unknown) =>
+              Number(value),
+          )
+        : [],
     escalationLevel:
       Number(
         row.escalation_level ?? 0,
       ),
-    cycleNumber:
-      Number(row.cycle_number ?? 1),
+    satisfiedAt:
+      nullableIso(row.satisfied_at),
+    metadata:
+      objectOrEmpty(
+        row.metadata,
+      ) as JsonObject,
+    createdAt:
+      iso(row.created_at),
+    updatedAt:
+      iso(row.updated_at),
   };
 }
 
@@ -915,54 +1008,6 @@ function effectiveExceptionStatus(
   }
 
   return storedStatus;
-}
-
-function effectiveDeadlineStatus(
-  row: any,
-  asOf: Date,
-): string {
-  if (
-    row.status === "satisfied" ||
-    row.status === "cancelled"
-  ) {
-    return row.status;
-  }
-
-  const dueAt =
-    new Date(row.due_at).getTime();
-  const warningSeconds =
-    Number(
-      row.warning_window_seconds ??
-        0,
-    );
-  const graceSeconds =
-    Number(
-      row.grace_period_seconds ??
-        0,
-    );
-  const at = asOf.getTime();
-
-  if (
-    at >=
-    dueAt + graceSeconds * 1_000
-  ) {
-    return "overdue";
-  }
-
-  if (at >= dueAt) {
-    return "due";
-  }
-
-  if (
-    warningSeconds > 0 &&
-    at >=
-      dueAt -
-        warningSeconds * 1_000
-  ) {
-    return "warning";
-  }
-
-  return "scheduled";
 }
 
 function effectiveCertificationStatus(
