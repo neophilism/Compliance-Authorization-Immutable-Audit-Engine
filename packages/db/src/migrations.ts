@@ -188,6 +188,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
     }
   }
 
+  if (!versions.has("0013_ruleset_legal_traceability")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(RULESET_LEGAL_TRACEABILITY_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0013_ruleset_legal_traceability"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
 }
 
 const CORE_DOMAIN_SQL = `
@@ -1299,4 +1314,119 @@ CREATE INDEX IF NOT EXISTS operator_credentials_principal_idx
 CREATE INDEX IF NOT EXISTS operator_credentials_active_expiry_idx
   ON operator_credentials(expires_at)
   WHERE status = 'active';
+`;
+
+
+const RULESET_LEGAL_TRACEABILITY_SQL = `
+ALTER TABLE rule_sets
+  ADD COLUMN IF NOT EXISTS declarative_snapshot jsonb,
+  ADD COLUMN IF NOT EXISTS content_hash text,
+  ADD COLUMN IF NOT EXISTS created_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS activated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS superseded_by_rule_set_id uuid REFERENCES rule_sets(id);
+
+ALTER TABLE rule_sets
+  DROP CONSTRAINT IF EXISTS rule_sets_content_hash_format;
+
+ALTER TABLE rule_sets
+  ADD CONSTRAINT rule_sets_content_hash_format
+  CHECK (
+    content_hash IS NULL
+    OR content_hash ~ '^[0-9a-f]{64}$'
+  );
+
+CREATE TABLE IF NOT EXISTS authority_sources (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  source_type text NOT NULL
+    CHECK (
+      source_type IN (
+        'statute',
+        'regulation',
+        'order',
+        'case',
+        'contract',
+        'policy',
+        'standard',
+        'guidance',
+        'other'
+      )
+    ),
+  jurisdiction text,
+  citation text NOT NULL,
+  title text NOT NULL,
+  uri text,
+  source_date timestamptz,
+  effective_from timestamptz,
+  effective_to timestamptz,
+  content_hash text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    organization_id,
+    source_type,
+    citation
+  ),
+  CHECK (
+    content_hash IS NULL
+    OR content_hash ~ '^[0-9a-f]{64}$'
+  ),
+  CHECK (
+    effective_to IS NULL
+    OR effective_from IS NULL
+    OR effective_to > effective_from
+  )
+);
+
+CREATE INDEX IF NOT EXISTS authority_sources_org_type_idx
+  ON authority_sources(
+    organization_id,
+    source_type,
+    citation
+  );
+
+CREATE TABLE IF NOT EXISTS rule_set_authority_links (
+  id uuid PRIMARY KEY,
+  rule_set_id uuid NOT NULL REFERENCES rule_sets(id),
+  authority_source_id uuid NOT NULL REFERENCES authority_sources(id),
+  relation text NOT NULL DEFAULT 'implements',
+  locator text,
+  locator_key text GENERATED ALWAYS AS (COALESCE(locator, '')) STORED,
+  note text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    rule_set_id,
+    authority_source_id,
+    relation,
+    locator_key
+  )
+);
+
+CREATE INDEX IF NOT EXISTS rule_set_authority_links_ruleset_idx
+  ON rule_set_authority_links(
+    rule_set_id,
+    authority_source_id
+  );
+
+ALTER TABLE checks
+  ADD COLUMN IF NOT EXISTS rule_set_revision_id uuid REFERENCES rule_sets(id);
+
+ALTER TABLE evaluation_schedules
+  ADD COLUMN IF NOT EXISTS rule_set_revision_id uuid REFERENCES rule_sets(id);
+
+CREATE INDEX IF NOT EXISTS checks_rule_set_revision_idx
+  ON checks(
+    organization_id,
+    rule_set_revision_id,
+    evaluated_at DESC
+  )
+  WHERE rule_set_revision_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS evaluation_schedules_rule_set_revision_idx
+  ON evaluation_schedules(
+    organization_id,
+    rule_set_revision_id
+  )
+  WHERE rule_set_revision_id IS NOT NULL;
 `;
