@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines",
+    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/evaluations",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines",
+    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions && npm run build -w @caiae/evidence && npm run build -w @caiae/deadlines && npm run build -w @caiae/evaluations",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
@@ -19,7 +19,8 @@
     "@caiae/authorization": "*",
     "@caiae/exceptions": "*",
     "@caiae/evidence": "*",
-    "@caiae/deadlines": "*"
+    "@caiae/deadlines": "*",
+    "@caiae/evaluations": "*"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

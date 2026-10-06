@@ -97,6 +97,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0007_automated_compliance_evaluations")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(AUTOMATED_COMPLIANCE_EVALUATIONS_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0007_automated_compliance_evaluations"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -716,4 +731,60 @@ CREATE INDEX IF NOT EXISTS deadlines_subject_idx
 
 CREATE INDEX IF NOT EXISTS deadline_occurrences_deadline_idx
   ON deadline_occurrences(deadline_id, cycle_number);
+`;
+
+
+const AUTOMATED_COMPLIANCE_EVALUATIONS_SQL = `
+CREATE TABLE IF NOT EXISTS evaluation_schedules (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  resource_id uuid REFERENCES resources(id),
+  resource_type text,
+  created_by_principal_id uuid REFERENCES principals(id),
+  rule_set_snapshot jsonb NOT NULL,
+  facts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  interval_seconds bigint NOT NULL CHECK (interval_seconds > 0),
+  next_run_at timestamptz NOT NULL,
+  last_run_at timestamptz,
+  active boolean NOT NULL DEFAULT true,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (
+    (resource_id IS NOT NULL AND resource_type IS NULL)
+    OR (resource_id IS NULL AND resource_type IS NOT NULL)
+  )
+);
+
+ALTER TABLE checks
+  ADD COLUMN IF NOT EXISTS schedule_id uuid REFERENCES evaluation_schedules(id),
+  ADD COLUMN IF NOT EXISTS trigger text NOT NULL DEFAULT 'manual',
+  ADD COLUMN IF NOT EXISTS trigger_detail jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS requested_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS scheduled_for timestamptz,
+  ADD COLUMN IF NOT EXISTS evaluated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS rule_set_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS context_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS evidence_trace jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS error_message text;
+
+ALTER TABLE checks
+  DROP CONSTRAINT IF EXISTS checks_trigger_valid;
+ALTER TABLE checks
+  ADD CONSTRAINT checks_trigger_valid
+  CHECK (trigger IN ('manual', 'event', 'scheduled'));
+
+CREATE INDEX IF NOT EXISTS checks_resource_completed_idx
+  ON checks(organization_id, resource_id, completed_at DESC);
+
+CREATE INDEX IF NOT EXISTS checks_schedule_idx
+  ON checks(schedule_id, scheduled_for);
+
+CREATE INDEX IF NOT EXISTS evaluation_schedules_due_idx
+  ON evaluation_schedules(next_run_at)
+  WHERE active = true;
+
+CREATE INDEX IF NOT EXISTS evaluation_schedules_resource_type_idx
+  ON evaluation_schedules(organization_id, resource_type)
+  WHERE active = true AND resource_type IS NOT NULL;
 `;

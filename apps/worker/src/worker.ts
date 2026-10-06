@@ -1,6 +1,7 @@
 import { AuthorizationService } from "@caiae/authorization";
 import { createPool, runMigrations } from "@caiae/db";
 import { DeadlineService } from "@caiae/deadlines";
+import { EvaluationService } from "@caiae/evaluations";
 import { ExceptionService } from "@caiae/exceptions";
 
 const authorizationSweepMs = Number(
@@ -12,11 +13,15 @@ const exceptionSweepMs = Number(
 const deadlineSweepMs = Number(
   process.env.DEADLINE_SWEEP_MS ?? 30_000,
 );
+const evaluationSweepMs = Number(
+  process.env.EVALUATION_SWEEP_MS ?? 30_000,
+);
 
 for (const [name, value] of [
   ["AUTHORIZATION_SWEEP_MS", authorizationSweepMs],
   ["EXCEPTION_SWEEP_MS", exceptionSweepMs],
   ["DEADLINE_SWEEP_MS", deadlineSweepMs],
+  ["EVALUATION_SWEEP_MS", evaluationSweepMs],
 ] as const) {
   if (!Number.isFinite(value) || value < 1_000) {
     throw new Error(
@@ -31,10 +36,12 @@ await runMigrations(pool);
 const authorizations = new AuthorizationService(pool);
 const exceptions = new ExceptionService(pool);
 const deadlines = new DeadlineService(pool);
+const evaluations = new EvaluationService(pool);
 
 let authorizationSweepRunning = false;
 let exceptionSweepRunning = false;
 let deadlineSweepRunning = false;
+let evaluationSweepRunning = false;
 
 async function sweepAuthorizations(): Promise<void> {
   if (authorizationSweepRunning) return;
@@ -120,6 +127,34 @@ async function sweepDeadlines(): Promise<void> {
   }
 }
 
+async function sweepEvaluations(): Promise<void> {
+  if (evaluationSweepRunning) return;
+  evaluationSweepRunning = true;
+
+  try {
+    const result = await evaluations.runDueSchedules(new Date());
+
+    console.log(
+      JSON.stringify({
+        event: "evaluation.schedule_sweep",
+        at: new Date().toISOString(),
+        ...result,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "evaluation.schedule_sweep_failed",
+        at: new Date().toISOString(),
+        message:
+          error instanceof Error ? error.message : "unknown error",
+      }),
+    );
+  } finally {
+    evaluationSweepRunning = false;
+  }
+}
+
 console.log(
   JSON.stringify({
     event: "compliance_worker.started",
@@ -127,6 +162,7 @@ console.log(
     authorizationSweepMs,
     exceptionSweepMs,
     deadlineSweepMs,
+    evaluationSweepMs,
   }),
 );
 
@@ -134,6 +170,7 @@ await Promise.all([
   sweepAuthorizations(),
   sweepExceptions(),
   sweepDeadlines(),
+  sweepEvaluations(),
 ]);
 
 const authorizationTimer = setInterval(() => {
@@ -148,10 +185,15 @@ const deadlineTimer = setInterval(() => {
   void sweepDeadlines();
 }, deadlineSweepMs);
 
+const evaluationTimer = setInterval(() => {
+  void sweepEvaluations();
+}, evaluationSweepMs);
+
 async function shutdown(signal: string): Promise<void> {
   clearInterval(authorizationTimer);
   clearInterval(exceptionTimer);
   clearInterval(deadlineTimer);
+  clearInterval(evaluationTimer);
 
   console.log(
     JSON.stringify({

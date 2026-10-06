@@ -17,6 +17,10 @@ import {
   DeadlineError,
   DeadlineService,
 } from "@caiae/deadlines";
+import {
+  EvaluationError,
+  EvaluationService,
+} from "@caiae/evaluations";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -223,6 +227,87 @@ function deadlineOptionalObject(
   return value as Record<string, any>;
 }
 
+function evaluationRequiredObject(
+  value: unknown,
+  field: string,
+): Record<string, any> {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new EvaluationError(
+      "validation",
+      `${field} must be an object`,
+    );
+  }
+  return value as Record<string, any>;
+}
+
+function evaluationOptionalObject(
+  value: unknown,
+  field: string,
+): Record<string, any> | undefined {
+  if (value === undefined) return undefined;
+  return evaluationRequiredObject(value, field);
+}
+
+function evaluationOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new EvaluationError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
+function evaluationOptionalNullableString(
+  value: unknown,
+  field: string,
+): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return evaluationOptionalString(value, field);
+}
+
+function evaluationRequiredInteger(
+  value: unknown,
+  field: string,
+): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new EvaluationError(
+      "validation",
+      `${field} must be a safe integer`,
+    );
+  }
+  return value as number;
+}
+
+function evaluationStringArray(
+  value: unknown,
+  field: string,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new EvaluationError(
+      "validation",
+      `${field} must be an array of strings`,
+    );
+  }
+  return value.map((item, index) => {
+    if (typeof item !== "string" || item.trim() === "") {
+      throw new EvaluationError(
+        "validation",
+        `${field}[${index}] must be a non-empty string`,
+      );
+    }
+    return item.trim();
+  });
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown_error";
 }
@@ -285,6 +370,19 @@ function deadlineHttpStatus(error: DeadlineError): number {
   }
 }
 
+function evaluationHttpStatus(error: EvaluationError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
@@ -294,6 +392,7 @@ export async function buildApp() {
   const exceptions = new ExceptionService(pool);
   const evidence = new EvidenceService(pool);
   const deadlines = new DeadlineService(pool);
+  const evaluations = new EvaluationService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -332,6 +431,15 @@ export async function buildApp() {
     if (error instanceof DeadlineError) {
       return reply
         .code(deadlineHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof EvaluationError) {
+      return reply
+        .code(evaluationHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -1040,6 +1148,205 @@ export async function buildApp() {
           "correlationId",
         ),
       });
+    },
+  );
+
+  app.post("/v1/checks/run", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    const result = await evaluations.run({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceId: requiredString(body.resourceId, "resourceId"),
+      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      requestedByPrincipalId: evaluationOptionalNullableString(
+        body.requestedByPrincipalId,
+        "requestedByPrincipalId",
+      ),
+      facts: evaluationOptionalObject(body.facts, "facts"),
+      evaluatedAt: evaluationOptionalString(
+        body.evaluatedAt,
+        "evaluatedAt",
+      ),
+      metadata: evaluationOptionalObject(
+        body.metadata,
+        "metadata",
+      ),
+      correlationId: evaluationOptionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send(result);
+  });
+
+  app.post("/v1/checks/event", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    const result = await evaluations.runEvent({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceId: requiredString(body.resourceId, "resourceId"),
+      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      requestedByPrincipalId: evaluationOptionalNullableString(
+        body.requestedByPrincipalId,
+        "requestedByPrincipalId",
+      ),
+      facts: evaluationOptionalObject(body.facts, "facts"),
+      eventType: requiredString(body.eventType, "eventType"),
+      event: evaluationRequiredObject(body.event, "event"),
+      evaluatedAt: evaluationOptionalString(
+        body.evaluatedAt,
+        "evaluatedAt",
+      ),
+      metadata: evaluationOptionalObject(
+        body.metadata,
+        "metadata",
+      ),
+      correlationId: evaluationOptionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send(result);
+  });
+
+  app.post("/v1/checks/batch", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    const results = await evaluations.runBatch({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceIds: evaluationStringArray(
+        body.resourceIds,
+        "resourceIds",
+      ),
+      ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+      requestedByPrincipalId: evaluationOptionalNullableString(
+        body.requestedByPrincipalId,
+        "requestedByPrincipalId",
+      ),
+      facts: evaluationOptionalObject(body.facts, "facts"),
+      evaluatedAt: evaluationOptionalString(
+        body.evaluatedAt,
+        "evaluatedAt",
+      ),
+      metadata: evaluationOptionalObject(
+        body.metadata,
+        "metadata",
+      ),
+      correlationId: evaluationOptionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send({ checks: results });
+  });
+
+  app.get("/v1/checks/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return evaluations.get(id);
+  });
+
+  app.get(
+    "/v1/organizations/:organizationId/resources/:resourceId/checks",
+    async (request) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+      return evaluations.listForResource(
+        organizationId,
+        resourceId,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/evaluation-schedules",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      const result = await evaluations.createSchedule({
+        organizationId: requiredString(
+          body.organizationId,
+          "organizationId",
+        ),
+        resourceId: evaluationOptionalNullableString(
+          body.resourceId,
+          "resourceId",
+        ),
+        resourceType: evaluationOptionalNullableString(
+          body.resourceType,
+          "resourceType",
+        ),
+        ruleSet: evaluationRequiredObject(body.ruleSet, "ruleSet"),
+        facts: evaluationOptionalObject(body.facts, "facts"),
+        intervalSeconds: evaluationRequiredInteger(
+          body.intervalSeconds,
+          "intervalSeconds",
+        ),
+        nextRunAt: evaluationOptionalString(
+          body.nextRunAt,
+          "nextRunAt",
+        ),
+        createdByPrincipalId: evaluationOptionalNullableString(
+          body.createdByPrincipalId,
+          "createdByPrincipalId",
+        ),
+        metadata: evaluationOptionalObject(
+          body.metadata,
+          "metadata",
+        ),
+        correlationId: evaluationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+
+      return reply.code(201).send(result);
+    },
+  );
+
+  app.get(
+    "/v1/evaluation-schedules/:id",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      return evaluations.getSchedule(id);
+    },
+  );
+
+  app.post(
+    "/v1/evaluation-schedules/:id/active",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      if (typeof body.active !== "boolean") {
+        throw new EvaluationError(
+          "validation",
+          "active must be a boolean",
+        );
+      }
+
+      return evaluations.setScheduleActive(
+        id,
+        body.active,
+        requiredString(body.principalId, "principalId"),
+        evaluationOptionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      );
     },
   );
 
