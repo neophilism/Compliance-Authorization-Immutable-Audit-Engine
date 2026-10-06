@@ -5,6 +5,10 @@ import {
   AuthorizationService,
 } from "@caiae/authorization";
 import { createPool, DomainRepository, runMigrations } from "@caiae/db";
+import {
+  ExceptionError,
+  ExceptionService,
+} from "@caiae/exceptions";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -134,12 +138,29 @@ function authorizationHttpStatus(error: AuthorizationError): number {
   }
 }
 
+function exceptionHttpStatus(error: ExceptionError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "forbidden_approver":
+      return 403;
+    case "invalid_state":
+    case "duplicate_decision":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
   const pool = createPool();
   await runMigrations(pool);
   const repository = new DomainRepository(pool);
   const authorizations = new AuthorizationService(pool);
+  const exceptions = new ExceptionService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -151,6 +172,15 @@ export async function buildApp() {
     if (error instanceof AuthorizationError) {
       return reply
         .code(authorizationHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof ExceptionError) {
+      return reply
+        .code(exceptionHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -383,6 +413,135 @@ export async function buildApp() {
 
       return authorizations.revoke({
         authorizationId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        reason: requiredString(body.reason, "reason"),
+        correlationId: optionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post("/v1/exceptions", async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    if (body.kind !== "exception" && body.kind !== "waiver") {
+      throw new ExceptionError(
+        "validation",
+        "kind must be exception or waiver",
+      );
+    }
+
+    const record = await exceptions.request({
+      organizationId: requiredString(
+        body.organizationId,
+        "organizationId",
+      ),
+      resourceId: requiredString(body.resourceId, "resourceId"),
+      ruleId: optionalNullableString(body.ruleId, "ruleId"),
+      kind: body.kind,
+      requestedByPrincipalId: requiredString(
+        body.requestedByPrincipalId,
+        "requestedByPrincipalId",
+      ),
+      justification: requiredString(
+        body.justification,
+        "justification",
+      ),
+      validFrom: optionalNullableString(body.validFrom, "validFrom"),
+      validUntil: requiredString(body.validUntil, "validUntil"),
+      scope: optionalObject(body.scope, "scope"),
+      conditions: optionalObject(body.conditions, "conditions"),
+      approvalQuorum: optionalPositiveInteger(
+        body.approvalQuorum,
+        "approvalQuorum",
+      ),
+      approvalAuthority: optionalNullableString(
+        body.approvalAuthority,
+        "approvalAuthority",
+      ),
+      eligibleApproverPrincipalIds: optionalStringArray(
+        body.eligibleApproverPrincipalIds,
+        "eligibleApproverPrincipalIds",
+      ),
+      metadata: optionalObject(body.metadata, "metadata"),
+      correlationId: optionalNullableString(
+        body.correlationId,
+        "correlationId",
+      ),
+    });
+
+    return reply.code(201).send(record);
+  });
+
+  app.get("/v1/exceptions/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return exceptions.get(id);
+  });
+
+  app.get(
+    "/v1/exceptions/:id/effectiveness",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const query = request.query as { at?: string };
+
+      if (query.at === undefined) {
+        return exceptions.effectiveness(id);
+      }
+
+      const at = new Date(query.at);
+      if (Number.isNaN(at.getTime())) {
+        throw new ExceptionError(
+          "validation",
+          "at must be a valid date-time",
+        );
+      }
+
+      return exceptions.effectiveness(id, at);
+    },
+  );
+
+  app.post(
+    "/v1/exceptions/:id/decisions",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      if (body.decision !== "approve" && body.decision !== "deny") {
+        throw new ExceptionError(
+          "validation",
+          "decision must be approve or deny",
+        );
+      }
+
+      return exceptions.recordDecision({
+        exceptionId: id,
+        principalId: requiredString(
+          body.principalId,
+          "principalId",
+        ),
+        decision: body.decision,
+        rationale: optionalString(body.rationale, "rationale"),
+        correlationId: optionalNullableString(
+          body.correlationId,
+          "correlationId",
+        ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/exceptions/:id/revoke",
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+
+      return exceptions.revoke({
+        exceptionId: id,
         principalId: requiredString(
           body.principalId,
           "principalId",
