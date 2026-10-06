@@ -37,7 +37,6 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
-}
 
   if (!versions.has("0003_authorization_engine")) {
     await pool.query("BEGIN");
