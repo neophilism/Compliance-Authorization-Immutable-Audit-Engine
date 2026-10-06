@@ -40,6 +40,10 @@ export function parseRuleSet(input: unknown): DeclarativeRuleSet {
     parseRule(rule, `ruleset.rules[${index}]`),
   );
 
+  if (rules.length === 0) {
+    throw new Error("ruleset.rules cannot be empty");
+  }
+
   const ids = new Set<string>();
   for (const rule of rules) {
     if (ids.has(rule.id)) {
@@ -263,9 +267,14 @@ function optionalJsonObject(
   value: unknown,
   path: string,
 ): JsonObject | undefined {
-  return value === undefined
-    ? undefined
-    : (jsonValue(value, path) as JsonObject);
+  if (value === undefined) return undefined;
+
+  const parsed = jsonValue(value, path);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${path} must be an object`);
+  }
+
+  return parsed;
 }
 
 function jsonValue(value: unknown, path: string): JsonValue {
