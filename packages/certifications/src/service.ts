@@ -495,7 +495,9 @@ export class CertificationService {
     );
 
     const criteria =
-      criteriaFromJson(existing.criteria);
+      normalizeCriteria(
+        criteriaFromJson(existing.criteria),
+      );
 
     await this.validateCheckAgainstCriteria(
       check,
@@ -654,8 +656,10 @@ export class CertificationService {
         }
 
         const criteria =
-          criteriaFromJson(
-            certification.criteria,
+          normalizeCriteria(
+            criteriaFromJson(
+              certification.criteria,
+            ),
           );
         const material =
           criteria.materialFailureSeverities.filter(
