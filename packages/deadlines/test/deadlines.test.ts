@@ -108,8 +108,9 @@ test("clock calculation advances scheduled to warning to due to overdue with esc
 
   const f = await fixture();
   try {
+    // Keep this unsatisfied fixture well beyond later global sweep tests.
     const due = new Date(
-      Date.now() + 600_000,
+      Date.now() + 7_200_000,
     );
 
     const record = await f.service.create({
