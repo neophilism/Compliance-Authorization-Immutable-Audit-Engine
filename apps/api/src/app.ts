@@ -29,6 +29,11 @@ import {
   FindingError,
   FindingService,
 } from "@caiae/findings";
+import {
+  ReportingError,
+  ReportingService,
+  renderComplianceReport,
+} from "@caiae/reporting";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -526,6 +531,49 @@ function findingHttpStatus(error: FindingError): number {
   }
 }
 
+function reportingHttpStatus(error: ReportingError): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    default:
+      return 500;
+  }
+}
+
+function reportFormat(
+  value: unknown,
+): "json" | "csv" | "text" {
+  if (value === undefined) return "json";
+  if (
+    value === "json" ||
+    value === "csv" ||
+    value === "text"
+  ) {
+    return value;
+  }
+
+  throw new ReportingError(
+    "validation",
+    "format must be json, csv, or text",
+  );
+}
+
+function reportOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ReportingError(
+      "validation",
+      `${field} must be a non-empty string`,
+    );
+  }
+  return value.trim();
+}
+
 function certificationHttpStatus(
   error: CertificationError,
 ): number {
@@ -553,6 +601,7 @@ export async function buildApp() {
   const evaluations = new EvaluationService(pool);
   const findings = new FindingService(pool);
   const certifications = new CertificationService(pool);
+  const reporting = new ReportingService(pool);
 
   await app.register(cors, { origin: true });
 
@@ -618,6 +667,15 @@ export async function buildApp() {
     if (error instanceof CertificationError) {
       return reply
         .code(certificationHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
+    if (error instanceof ReportingError) {
+      return reply
+        .code(reportingHttpStatus(error))
         .send({
           error: error.code,
           message: error.message,
@@ -2110,6 +2168,76 @@ export async function buildApp() {
       }
 
       return certifications.verify(code, at);
+    },
+  );
+
+  app.get(
+    "/v1/reports/organizations/:organizationId/compliance",
+    async (request, reply) => {
+      const { organizationId } = request.params as {
+        organizationId: string;
+      };
+      const query = request.query as {
+        format?: unknown;
+        asOf?: unknown;
+      };
+      const format = reportFormat(query.format);
+      const report = await reporting.generate({
+        organizationId,
+        asOf: reportOptionalString(
+          query.asOf,
+          "asOf",
+        ),
+      });
+
+      if (format === "json") {
+        return report;
+      }
+
+      const rendered = renderComplianceReport(
+        report,
+        format,
+      );
+
+      return reply
+        .type(rendered.mediaType)
+        .send(rendered.body);
+    },
+  );
+
+  app.get(
+    "/v1/reports/organizations/:organizationId/resources/:resourceId/compliance",
+    async (request, reply) => {
+      const { organizationId, resourceId } = request.params as {
+        organizationId: string;
+        resourceId: string;
+      };
+      const query = request.query as {
+        format?: unknown;
+        asOf?: unknown;
+      };
+      const format = reportFormat(query.format);
+      const report = await reporting.generate({
+        organizationId,
+        resourceId,
+        asOf: reportOptionalString(
+          query.asOf,
+          "asOf",
+        ),
+      });
+
+      if (format === "json") {
+        return report;
+      }
+
+      const rendered = renderComplianceReport(
+        report,
+        format,
+      );
+
+      return reply
+        .type(rendered.mediaType)
+        .send(rendered.body);
     },
   );
 
