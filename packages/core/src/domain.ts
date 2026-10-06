@@ -254,6 +254,7 @@ export type RemediationStatus =
 
 export interface Remediation extends BaseEntity {
   findingId: EntityId;
+  deadlineId: EntityId | null;
   createdByPrincipalId: EntityId;
   ownerPrincipalId: EntityId | null;
   status: RemediationStatus;
