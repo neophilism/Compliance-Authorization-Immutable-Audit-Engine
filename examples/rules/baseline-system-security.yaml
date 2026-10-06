@@ -1,0 +1,49 @@
+schemaVersion: "1"
+id: baseline-system-security
+version: "1.0.0"
+title: Baseline System Security
+description: Fictional domain-neutral rules used to demonstrate the declarative evaluator.
+
+rules:
+  - id: sensitive-data-at-rest-encrypted
+    title: Sensitive data is encrypted at rest
+    severity: critical
+    appliesWhen:
+      field: resource.attributes.containsSensitiveInformation
+      operator: equals
+      value: true
+    require:
+      field: resource.attributes.encryption.atRest.enabled
+      operator: equals
+      value: true
+    requiredEvidenceTypes:
+      - encryption-configuration
+
+  - id: modern-transport-security
+    title: Modern transport security is enabled
+    severity: high
+    appliesWhen:
+      field: resource.resourceType
+      operator: equals
+      value: information-system
+    require:
+      all:
+        - field: resource.attributes.encryption.inTransit.enabled
+          operator: equals
+          value: true
+        - field: resource.attributes.encryption.minimumTlsVersion
+          operator: greaterThanOrEqual
+          value: 1.2
+    requiredEvidenceTypes:
+      - transport-security-configuration
+
+  - id: production-owner-defined
+    title: Production resources identify an accountable owner
+    severity: medium
+    appliesWhen:
+      field: resource.attributes.environment
+      operator: equals
+      value: production
+    require:
+      field: resource.attributes.owner
+      operator: exists
