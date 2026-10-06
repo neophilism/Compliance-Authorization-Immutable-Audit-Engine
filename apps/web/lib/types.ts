@@ -202,3 +202,26 @@ export type EvidenceItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+
+export type AuthenticatedOperatorView = {
+  credential: {
+    id: string;
+    organizationId: string;
+    principalId: string;
+    name: string;
+    tokenPrefix: string;
+    status: "active" | "revoked";
+    expiresAt: string | null;
+    lastUsedAt: string | null;
+  };
+  principal: Principal & {
+    status: "active";
+  };
+  roles: Array<{
+    id: string;
+    key: string;
+    name: string;
+  }>;
+  permissions: string[];
+};
