@@ -187,7 +187,7 @@ async function fixture() {
        '{"internal":"criteria"}'::jsonb,
        '{"internal":"conditions"}'::jsonb,
        '{"secret":"full-artifact"}'::jsonb,
-       '{"schemaVersion":"1","certificateNumber":"CERT-PUBLIC-001","safe":"yes"}'::jsonb,
+       $8::jsonb,
        '{"internal":"certification-secret"}'::jsonb
      )`,
     [
@@ -198,6 +198,11 @@ async function fixture() {
       principalId,
       certificateNumber,
       verificationCode,
+      JSON.stringify({
+        schemaVersion: "1",
+        certificateNumber,
+        safe: "yes",
+      }),
     ],
   );
 
