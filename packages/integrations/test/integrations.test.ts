@@ -318,6 +318,44 @@ test("idempotent resource creation replays identical requests and rejects key re
       events.items.length,
       2,
     );
+
+    const eventPage1 =
+      await f.service.listEvents(
+        auth,
+        {
+          limit: 1,
+          eventType:
+            "resource.created",
+        },
+      );
+    assert.equal(
+      eventPage1.items.length,
+      1,
+    );
+    assert.notEqual(
+      eventPage1.nextCursor,
+      null,
+    );
+
+    const eventPage2 =
+      await f.service.listEvents(
+        auth,
+        {
+          limit: 1,
+          cursor:
+            eventPage1.nextCursor,
+          eventType:
+            "resource.created",
+        },
+      );
+    assert.equal(
+      eventPage2.items.length,
+      1,
+    );
+    assert.notEqual(
+      eventPage2.items[0]?.id,
+      eventPage1.items[0]?.id,
+    );
   } finally {
     await f.pool.end();
   }
