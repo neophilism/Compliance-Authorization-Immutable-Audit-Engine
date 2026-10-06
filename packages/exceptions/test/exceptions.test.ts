@@ -465,11 +465,13 @@ test("approval after the validity window records expiration instead of creating 
 
     await f.pool.query(
       `UPDATE exceptions
-       SET valid_until = $2
+       SET requested_at = $2,
+           valid_until = $3
        WHERE id = $1`,
       [
         record.exception.id,
-        new Date(Date.now() - 1_000).toISOString(),
+        new Date(Date.now() - 120_000).toISOString(),
+        new Date(Date.now() - 60_000).toISOString(),
       ],
     );
 
