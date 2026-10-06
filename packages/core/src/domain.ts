@@ -212,23 +212,62 @@ export interface EvaluationSchedule extends BaseEntity {
   active: boolean;
 }
 
+export type FindingStatus =
+  | "open"
+  | "acknowledged"
+  | "disputed"
+  | "remediating"
+  | "resolved"
+  | "closed";
+
 export interface Finding extends BaseEntity {
   resourceId: EntityId;
   checkId: EntityId | null;
   ruleId: EntityId | null;
+  ruleKey: string | null;
+  ruleSetKey: string | null;
+  ruleSetVersion: string | null;
   severity: "info" | "low" | "medium" | "high" | "critical";
-  status: "open" | "acknowledged" | "remediating" | "resolved" | "closed";
+  status: FindingStatus;
+  ownerPrincipalId: EntityId | null;
   title: string;
   description: string;
+  ruleResult: JsonObject;
+  openedAt: ISODateTime;
+  acknowledgedAt: ISODateTime | null;
+  acknowledgedByPrincipalId: EntityId | null;
+  disputedAt: ISODateTime | null;
+  disputedByPrincipalId: EntityId | null;
+  disputeReason: string | null;
+  resolvedAt: ISODateTime | null;
+  closedAt: ISODateTime | null;
+  reopenedAt: ISODateTime | null;
 }
+
+export type RemediationStatus =
+  | "planned"
+  | "in_progress"
+  | "ready_for_verification"
+  | "verified"
+  | "rejected"
+  | "cancelled";
 
 export interface Remediation extends BaseEntity {
   findingId: EntityId;
+  createdByPrincipalId: EntityId;
   ownerPrincipalId: EntityId | null;
-  status: "planned" | "in_progress" | "ready_for_verification" | "verified" | "rejected" | "cancelled";
+  status: RemediationStatus;
   plan: string;
   dueAt: ISODateTime | null;
+  startedAt: ISODateTime | null;
   completedAt: ISODateTime | null;
+  verifiedAt: ISODateTime | null;
+  verifiedByPrincipalId: EntityId | null;
+  verificationNote: string | null;
+  rejectedAt: ISODateTime | null;
+  rejectedByPrincipalId: EntityId | null;
+  rejectionReason: string | null;
+  cancelledAt: ISODateTime | null;
 }
 
 export interface Certification extends BaseEntity {
