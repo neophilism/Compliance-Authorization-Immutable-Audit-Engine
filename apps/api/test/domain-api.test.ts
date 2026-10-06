@@ -52,6 +52,61 @@ test("core domain can be created and retrieved through the API", async () => {
     assert.equal(getResponse.statusCode, 200);
     assert.equal(getResponse.json().name, "API Test System");
 
+    const updateResponse =
+      await app.inject({
+        method: "PATCH",
+        url:
+          `/v1/resources/${resource.id}`,
+        payload: {
+          expectedUpdatedAt:
+            resource.updatedAt,
+          name:
+            "API Test System Updated",
+          attributes: {
+            environment:
+              "test",
+            complianceState:
+              "reviewed",
+          },
+        },
+      });
+    assert.equal(
+      updateResponse.statusCode,
+      200,
+    );
+    const updatedResource =
+      updateResponse.json();
+    assert.equal(
+      updatedResource.name,
+      "API Test System Updated",
+    );
+    assert.equal(
+      updatedResource.attributes
+        .complianceState,
+      "reviewed",
+    );
+
+    const staleUpdate =
+      await app.inject({
+        method: "PATCH",
+        url:
+          `/v1/resources/${resource.id}`,
+        payload: {
+          expectedUpdatedAt:
+            resource.updatedAt,
+          status:
+            "inactive",
+        },
+      });
+    assert.equal(
+      staleUpdate.statusCode,
+      409,
+    );
+    assert.equal(
+      staleUpdate.json().error,
+      "conflict",
+    );
+
     const listResponse = await app.inject({
       method: "GET",
       url: `/v1/organizations/${organization.id}/resources?resourceType=information-system`,
