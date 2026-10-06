@@ -112,6 +112,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0008_findings_remediation_lifecycle")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(FINDINGS_REMEDIATION_LIFECYCLE_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0008_findings_remediation_lifecycle"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -787,4 +802,65 @@ CREATE INDEX IF NOT EXISTS evaluation_schedules_due_idx
 CREATE INDEX IF NOT EXISTS evaluation_schedules_resource_type_idx
   ON evaluation_schedules(organization_id, resource_type)
   WHERE active = true AND resource_type IS NOT NULL;
+`;
+
+
+const FINDINGS_REMEDIATION_LIFECYCLE_SQL = `
+ALTER TABLE findings
+  DROP CONSTRAINT IF EXISTS findings_status_check;
+
+ALTER TABLE findings
+  ADD CONSTRAINT findings_status_check
+  CHECK (
+    status IN (
+      'open',
+      'acknowledged',
+      'disputed',
+      'remediating',
+      'resolved',
+      'closed'
+    )
+  );
+
+ALTER TABLE findings
+  ADD COLUMN IF NOT EXISTS rule_key text,
+  ADD COLUMN IF NOT EXISTS rule_set_key text,
+  ADD COLUMN IF NOT EXISTS rule_set_version text,
+  ADD COLUMN IF NOT EXISTS owner_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS rule_result jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS opened_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS acknowledged_at timestamptz,
+  ADD COLUMN IF NOT EXISTS acknowledged_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS disputed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS disputed_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS dispute_reason text,
+  ADD COLUMN IF NOT EXISTS resolved_at timestamptz,
+  ADD COLUMN IF NOT EXISTS closed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS reopened_at timestamptz;
+
+CREATE UNIQUE INDEX IF NOT EXISTS findings_check_rule_key_unique_idx
+  ON findings(check_id, rule_key)
+  WHERE check_id IS NOT NULL AND rule_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS findings_resource_status_idx
+  ON findings(organization_id, resource_id, status);
+
+ALTER TABLE remediations
+  ADD COLUMN IF NOT EXISTS created_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS started_at timestamptz,
+  ADD COLUMN IF NOT EXISTS verified_at timestamptz,
+  ADD COLUMN IF NOT EXISTS verified_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS verification_note text,
+  ADD COLUMN IF NOT EXISTS rejected_at timestamptz,
+  ADD COLUMN IF NOT EXISTS rejected_by_principal_id uuid REFERENCES principals(id),
+  ADD COLUMN IF NOT EXISTS rejection_reason text,
+  ADD COLUMN IF NOT EXISTS cancelled_at timestamptz;
+
+UPDATE remediations
+SET created_by_principal_id = owner_principal_id
+WHERE created_by_principal_id IS NULL
+  AND owner_principal_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS remediations_finding_status_idx
+  ON remediations(finding_id, status, created_at);
 `;
