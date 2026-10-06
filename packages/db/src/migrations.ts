@@ -22,6 +22,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
       throw error;
     }
   }
+
+  if (!versions.has("0002_tamper_evident_audit")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(TAMPER_EVIDENT_AUDIT_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0002_tamper_evident_audit"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 const CORE_DOMAIN_SQL = `
@@ -257,4 +272,92 @@ CREATE TABLE audit_events (
 );
 CREATE INDEX audit_events_aggregate_idx
   ON audit_events(organization_id, aggregate_type, aggregate_id, recorded_at);
+`;
+
+
+const TAMPER_EVIDENT_AUDIT_SQL = `
+ALTER TABLE audit_events
+  ADD COLUMN IF NOT EXISTS sequence_number bigint;
+
+WITH ranked AS (
+  SELECT
+    id,
+    row_number() OVER (
+      PARTITION BY organization_id, aggregate_type, aggregate_id
+      ORDER BY recorded_at ASC, id ASC
+    ) AS sequence_number
+  FROM audit_events
+  WHERE sequence_number IS NULL
+)
+UPDATE audit_events AS events
+SET sequence_number = ranked.sequence_number
+FROM ranked
+WHERE events.id = ranked.id;
+
+ALTER TABLE audit_events
+  ALTER COLUMN sequence_number SET NOT NULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM audit_events WHERE event_hash IS NULL) THEN
+    RAISE EXCEPTION
+      'Existing audit_events without event_hash must be repaired before enabling tamper-evident audit';
+  END IF;
+END
+$$;
+
+ALTER TABLE audit_events
+  ALTER COLUMN event_hash SET NOT NULL;
+
+ALTER TABLE audit_events
+  DROP CONSTRAINT IF EXISTS audit_events_event_hash_format;
+
+ALTER TABLE audit_events
+  ADD CONSTRAINT audit_events_event_hash_format
+  CHECK (event_hash ~ '^[0-9a-f]{64}$');
+
+ALTER TABLE audit_events
+  DROP CONSTRAINT IF EXISTS audit_events_previous_hash_format;
+
+ALTER TABLE audit_events
+  ADD CONSTRAINT audit_events_previous_hash_format
+  CHECK (
+    previous_event_hash IS NULL
+    OR previous_event_hash ~ '^[0-9a-f]{64}$'
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS audit_events_chain_sequence_uidx
+  ON audit_events(
+    organization_id,
+    aggregate_type,
+    aggregate_id,
+    sequence_number
+  );
+
+CREATE INDEX IF NOT EXISTS audit_events_chain_hash_idx
+  ON audit_events(
+    organization_id,
+    aggregate_type,
+    aggregate_id,
+    event_hash
+  );
+
+CREATE OR REPLACE FUNCTION reject_audit_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION
+    'audit_events is append-only; % is not permitted',
+    TG_OP
+    USING ERRCODE = '55000';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS audit_events_append_only ON audit_events;
+
+CREATE TRIGGER audit_events_append_only
+BEFORE UPDATE OR DELETE ON audit_events
+FOR EACH ROW
+EXECUTE FUNCTION reject_audit_event_mutation();
 `;
