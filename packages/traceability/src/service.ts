@@ -1443,9 +1443,22 @@ function normalizeNullableString(
 function sha256(
   value: unknown,
 ): string {
+  const serialized =
+    JSON.stringify(value);
+
+  if (serialized === undefined) {
+    throw new TraceabilityError(
+      "validation",
+      "traceability content must be JSON-serializable",
+    );
+  }
+
+  const jsonSafe =
+    JSON.parse(serialized) as unknown;
+
   return createHash("sha256")
     .update(
-      canonicalJson(value),
+      canonicalJson(jsonSafe),
       "utf8",
     )
     .digest("hex");
