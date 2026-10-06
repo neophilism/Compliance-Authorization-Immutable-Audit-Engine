@@ -19,6 +19,8 @@ The engine creates a check, transitions it through `pending` and `running`, eval
 Each completed check stores:
 
 - normalized ruleset snapshot;
+- canonical ruleset hash;
+- ruleset provenance manifest;
 - evaluation context snapshot;
 - valid evidence trace;
 - ruleset evaluation result;
@@ -64,3 +66,10 @@ Checks emit:
 Schedules emit creation and activation-state events.
 
 The check history is protected by the engine's existing tamper-evident audit ledger.
+
+
+## Registered ruleset evaluations
+
+PR 17 allows manual, event, batch, scheduled, and service-triggered checks to reference an immutable registered ruleset version instead of embedding an ad-hoc ruleset.
+
+Registered checks persist the registry ID in addition to the exact snapshot and verify that the selected version is effective at the evaluation time. Ad-hoc checks remain supported and are explicitly marked as ad hoc in the provenance manifest.

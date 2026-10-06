@@ -99,3 +99,14 @@ Exit codes:
 - `1`: fail
 - `2`: invalid input or execution error
 - `3`: unknown
+
+
+## Registered versions and traceability
+
+PR 17 adds an optional immutable registry around this ruleset format.
+
+A ruleset can still be evaluated directly as an ad-hoc document. For governed workflows, the same normalized document can instead be registered under its stable `id`/version, linked to generic authority references, activated for an effective window, and evaluated by registered version ID.
+
+Registration does not alter the declarative expression language. It adds provenance, lifecycle, canonical hashing, and historical effective-date resolution around the existing evaluator.
+
+See `docs/ruleset-traceability.md`.
