@@ -108,14 +108,41 @@ export interface AuthorizationDecision extends BaseEntity {
   decidedAt: ISODateTime;
 }
 
+export type ExceptionKind = "exception" | "waiver";
+
+export type ExceptionStatus =
+  | "requested"
+  | "approved"
+  | "denied"
+  | "expired"
+  | "revoked";
+
+export type ExceptionDecisionValue = "approve" | "deny";
+
 export interface ExceptionRecord extends BaseEntity {
   resourceId: EntityId;
   ruleId: EntityId | null;
-  status: "requested" | "approved" | "denied" | "expired" | "revoked";
+  kind: ExceptionKind;
+  status: ExceptionStatus;
+  requestedByPrincipalId: EntityId;
+  decidedByPrincipalId: EntityId | null;
+  requestedAt: ISODateTime;
+  decidedAt: ISODateTime | null;
   justification: string;
   validFrom: ISODateTime | null;
-  validUntil: ISODateTime | null;
+  validUntil: ISODateTime;
+  scope: JsonObject;
   conditions: JsonObject;
+  approvalQuorum: number;
+  approvalAuthority: string | null;
+}
+
+export interface ExceptionDecision extends BaseEntity {
+  exceptionId: EntityId;
+  principalId: EntityId;
+  decision: ExceptionDecisionValue;
+  rationale: string;
+  decidedAt: ISODateTime;
 }
 
 export interface Evidence extends BaseEntity {
