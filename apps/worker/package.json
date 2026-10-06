@@ -8,11 +8,17 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
+    "test": "node --test",
+    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization",
+    "prestart": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "@types/node": "^22.10.1"
+  },
+  "dependencies": {
+    "@caiae/authorization": "*",
+    "@caiae/db": "*"
   }
 }
