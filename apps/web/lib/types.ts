@@ -180,30 +180,25 @@ export type AuthorizationQueueItem = {
 };
 
 export type EvidenceItem = {
-  evidence: {
-    id: string;
-    organizationId: string;
-    resourceId: string;
-    evidenceType: string;
-    title: string;
-    status: string;
-    submittedByPrincipalId: string | null;
-    source: string | null;
-    uri: string | null;
-    fileName: string | null;
-    checksumAlgorithm: string | null;
-    checksum: string | null;
-    capturedAt: string | null;
-    validFrom: string | null;
-    validUntil: string | null;
-    attributes: Record<string, unknown>;
-  };
-  attestations: Array<{
-    id: string;
-    principalId: string;
-    attestationType: string;
-    statement: string;
-    attestedAt: string;
-    revokedAt: string | null;
-  }>;
+  id: string;
+  organizationId: string;
+  resourceId: string;
+  evidenceType: string;
+  title: string;
+  status: string;
+  submittedByPrincipalId: string | null;
+  source: string | null;
+  uri: string | null;
+  mediaType: string | null;
+  fileName: string | null;
+  checksumAlgorithm: string | null;
+  checksum: string | null;
+  capturedAt: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  attributes: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 };
