@@ -124,20 +124,48 @@ export class ReportingService {
         scopeParams,
       ),
       this.pool.query(
-        `SELECT *
-         FROM checks
-         WHERE organization_id = $1
+        `SELECT
+           c.*,
+           rs.content_hash AS rule_set_content_hash,
+           COALESCE(
+             (
+               SELECT jsonb_agg(
+                 jsonb_build_object(
+                   'sourceType', a.source_type,
+                   'citation', a.citation,
+                   'title', a.title,
+                   'relation', l.relation,
+                   'locator', l.locator
+                 )
+                 ORDER BY
+                   a.citation ASC,
+                   l.relation ASC,
+                   l.locator_key ASC
+               )
+               FROM rule_set_authority_links AS l
+               INNER JOIN authority_sources AS a
+                 ON a.id = l.authority_source_id
+               WHERE l.rule_set_id =
+                 c.rule_set_revision_id
+             ),
+             '[]'::jsonb
+           ) AS rule_set_authorities
+         FROM checks AS c
+         LEFT JOIN rule_sets AS rs
+           ON rs.id =
+             c.rule_set_revision_id
+         WHERE c.organization_id = $1
            AND (
              $2::uuid IS NULL
-             OR resource_id = $2::uuid
+             OR c.resource_id = $2::uuid
            )
          ORDER BY
            COALESCE(
-             completed_at,
-             evaluated_at,
-             created_at
+             c.completed_at,
+             c.evaluated_at,
+             c.created_at
            ) DESC,
-           id DESC`,
+           c.id DESC`,
         scopeParams,
       ),
       this.pool.query(
@@ -524,6 +552,46 @@ function mapCheck(
       stringOrNull(
         ruleSetSnapshot.version,
       ),
+    ruleSetRevisionId:
+      row.rule_set_revision_id ??
+      null,
+    ruleSetContentHash:
+      row.rule_set_content_hash ??
+      null,
+    authoritySources:
+      Array.isArray(
+        row.rule_set_authorities,
+      )
+        ? row.rule_set_authorities.map(
+            (source: any) => ({
+              sourceType:
+                String(
+                  source.sourceType,
+                ),
+              citation:
+                String(
+                  source.citation,
+                ),
+              title:
+                String(
+                  source.title,
+                ),
+              relation:
+                String(
+                  source.relation,
+                ),
+              locator:
+                source.locator ===
+                  null ||
+                source.locator ===
+                  undefined
+                  ? null
+                  : String(
+                      source.locator,
+                    ),
+            }),
+          )
+        : [],
     counts:
       toJsonObject(counts),
     errorMessage:
