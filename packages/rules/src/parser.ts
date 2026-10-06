@@ -3,6 +3,7 @@ import type { JsonObject, JsonValue } from "@caiae/core";
 import type {
   DeclarativeRule,
   DeclarativeRuleSet,
+  EvaluationContext,
   PredicateOperator,
   RuleExpression,
   Severity,
@@ -55,6 +56,61 @@ export function parseRuleSet(input: unknown): DeclarativeRuleSet {
     description: optionalString(source.description, "ruleset.description"),
     rules,
     metadata: optionalJsonObject(source.metadata, "ruleset.metadata"),
+  };
+}
+
+export function parseEvaluationContext(input: unknown): EvaluationContext {
+  const source = object(input, "context");
+  const resource = object(source.resource, "context.resource");
+  const attributes = jsonValue(
+    resource.attributes,
+    "context.resource.attributes",
+  );
+
+  if (
+    attributes === null ||
+    typeof attributes !== "object" ||
+    Array.isArray(attributes)
+  ) {
+    throw new Error("context.resource.attributes must be an object");
+  }
+
+  const metadata =
+    resource.metadata === undefined
+      ? undefined
+      : optionalJsonObject(
+          resource.metadata,
+          "context.resource.metadata",
+        );
+
+  const facts =
+    source.facts === undefined
+      ? undefined
+      : optionalJsonObject(source.facts, "context.facts");
+
+  const evidenceTypes =
+    source.evidenceTypes === undefined
+      ? undefined
+      : array(source.evidenceTypes, "context.evidenceTypes").map(
+          (value, index) =>
+            string(value, `context.evidenceTypes[${index}]`),
+        );
+
+  return {
+    resource: {
+      resourceType: string(
+        resource.resourceType,
+        "context.resource.resourceType",
+      ),
+      status: optionalString(
+        resource.status,
+        "context.resource.status",
+      ),
+      attributes,
+      metadata,
+    },
+    facts,
+    evidenceTypes,
   };
 }
 
