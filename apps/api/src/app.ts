@@ -53,6 +53,11 @@ import {
   SecurityService,
   type AuthenticatedOperator,
 } from "@caiae/security";
+import {
+  TraceabilityError,
+  TraceabilityService,
+  type AuthoritySourceType,
+} from "@caiae/traceability";
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
@@ -777,6 +782,22 @@ function publicationOptionalObject(
   return value as Record<string, any>;
 }
 
+function traceabilityHttpStatus(
+  error: TraceabilityError,
+): number {
+  switch (error.code) {
+    case "validation":
+      return 400;
+    case "not_found":
+      return 404;
+    case "conflict":
+    case "invalid_state":
+      return 409;
+    default:
+      return 500;
+  }
+}
+
 function securityHttpStatus(
   error: SecurityError,
 ): number {
@@ -995,6 +1016,8 @@ export async function buildApp(
     bootstrapSecret:
       options.bootstrapSecret,
   });
+  const traceability =
+    new TraceabilityService(pool);
   const integrations = new IntegrationService(pool);
   const securityMode =
     options.securityMode ??
@@ -1027,6 +1050,8 @@ export async function buildApp(
       "publication_controls",
       "api_credentials",
       "operator_credentials",
+      "authority_sources",
+      "rule_sets",
     ]);
 
     if (!allowed.has(table)) {
@@ -1100,6 +1125,8 @@ export async function buildApp(
       ["/v1/publications/", "publication_controls"],
       ["/v1/integration/api-credentials/", "api_credentials"],
       ["/v1/security/operator-credentials/", "operator_credentials"],
+      ["/v1/authority-sources/", "authority_sources"],
+      ["/v1/rule-set-revisions/", "rule_sets"],
     ];
 
     for (
@@ -1335,6 +1362,15 @@ export async function buildApp(
         });
     }
 
+    if (error instanceof TraceabilityError) {
+      return reply
+        .code(traceabilityHttpStatus(error))
+        .send({
+          error: error.code,
+          message: error.message,
+        });
+    }
+
     const message = errorMessage(error);
 
     if (message.endsWith(" is required")) {
@@ -1387,6 +1423,297 @@ export async function buildApp(
       scopes,
     );
   }
+
+  app.post(
+    "/v1/authority-sources",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth =
+        operatorAuth(request);
+      const source =
+        await traceability.createAuthoritySource({
+          organizationId:
+            requiredString(
+              body.organizationId,
+              "organizationId",
+            ),
+          sourceType:
+            requiredString(
+              body.sourceType,
+              "sourceType",
+            ) as AuthoritySourceType,
+          jurisdiction:
+            optionalNullableString(
+              body.jurisdiction,
+              "jurisdiction",
+            ),
+          citation:
+            requiredString(
+              body.citation,
+              "citation",
+            ),
+          title:
+            requiredString(
+              body.title,
+              "title",
+            ),
+          uri:
+            optionalNullableString(
+              body.uri,
+              "uri",
+            ),
+          sourceDate:
+            optionalNullableString(
+              body.sourceDate,
+              "sourceDate",
+            ),
+          effectiveFrom:
+            optionalNullableString(
+              body.effectiveFrom,
+              "effectiveFrom",
+            ),
+          effectiveTo:
+            optionalNullableString(
+              body.effectiveTo,
+              "effectiveTo",
+            ),
+          contentHash:
+            optionalNullableString(
+              body.contentHash,
+              "contentHash",
+            ),
+          metadata:
+            optionalObject(
+              body.metadata,
+              "metadata",
+            ),
+          principalId:
+            auth.principal.id,
+          correlationId:
+            optionalNullableString(
+              body.correlationId,
+              "correlationId",
+            ),
+        });
+
+      return reply
+        .code(201)
+        .send(source);
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/authority-sources",
+    async (request) => {
+      const { organizationId } =
+        request.params as {
+          organizationId: string;
+        };
+      return traceability.listAuthoritySources(
+        organizationId,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/rule-set-revisions",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth =
+        operatorAuth(request);
+      const revision =
+        await traceability.registerRuleSetRevision({
+          organizationId:
+            requiredString(
+              body.organizationId,
+              "organizationId",
+            ),
+          policyId:
+            requiredString(
+              body.policyId,
+              "policyId",
+            ),
+          ruleSet:
+            evaluationRequiredObject(
+              body.ruleSet,
+              "ruleSet",
+            ),
+          effectiveFrom:
+            optionalNullableString(
+              body.effectiveFrom,
+              "effectiveFrom",
+            ),
+          effectiveTo:
+            optionalNullableString(
+              body.effectiveTo,
+              "effectiveTo",
+            ),
+          metadata:
+            optionalObject(
+              body.metadata,
+              "metadata",
+            ),
+          principalId:
+            auth.principal.id,
+          authorityLinks:
+            Array.isArray(
+              body.authorityLinks,
+            )
+              ? body.authorityLinks.map(
+                  (item, index) => {
+                    if (
+                      item === null ||
+                      typeof item !==
+                        "object" ||
+                      Array.isArray(item)
+                    ) {
+                      throw new TraceabilityError(
+                        "validation",
+                        `authorityLinks[${index}] must be an object`,
+                      );
+                    }
+                    const link =
+                      item as Record<
+                        string,
+                        unknown
+                      >;
+                    return {
+                      authoritySourceId:
+                        requiredString(
+                          link.authoritySourceId,
+                          `authorityLinks[${index}].authoritySourceId`,
+                        ),
+                      relation:
+                        typeof link.relation ===
+                          "string"
+                          ? link.relation
+                          : undefined,
+                      locator:
+                        link.locator ===
+                          null ||
+                        typeof link.locator ===
+                          "string"
+                          ? link.locator as
+                              string | null
+                          : undefined,
+                      note:
+                        link.note === null ||
+                        typeof link.note ===
+                          "string"
+                          ? link.note as
+                              string | null
+                          : undefined,
+                    };
+                  },
+                )
+              : undefined,
+          correlationId:
+            optionalNullableString(
+              body.correlationId,
+              "correlationId",
+            ),
+        });
+
+      return reply
+        .code(201)
+        .send(revision);
+    },
+  );
+
+  app.get(
+    "/v1/rule-set-revisions/:id",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      return traceability.getRuleSetRevision(
+        id,
+      );
+    },
+  );
+
+  app.get(
+    "/v1/organizations/:organizationId/rule-set-revisions",
+    async (request) => {
+      const { organizationId } =
+        request.params as {
+          organizationId: string;
+        };
+      const query =
+        request.query as Record<
+          string,
+          unknown
+        >;
+      return traceability.listRuleSetRevisions(
+        organizationId,
+        typeof query.key === "string"
+          ? query.key
+          : undefined,
+      );
+    },
+  );
+
+  app.post(
+    "/v1/rule-set-revisions/:id/activate",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth =
+        operatorAuth(request);
+      return traceability.activateRuleSetRevision({
+        ruleSetId: id,
+        principalId:
+          auth.principal.id,
+        effectiveFrom:
+          optionalNullableString(
+            body.effectiveFrom,
+            "effectiveFrom",
+          ),
+        correlationId:
+          optionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
+
+  app.post(
+    "/v1/rule-set-revisions/:id/supersede",
+    async (request) => {
+      const { id } =
+        request.params as {
+          id: string;
+        };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const auth =
+        operatorAuth(request);
+      return traceability.supersedeRuleSetRevision({
+        ruleSetId: id,
+        supersededByRuleSetId:
+          requiredString(
+            body.supersededByRuleSetId,
+            "supersededByRuleSetId",
+          ),
+        principalId:
+          auth.principal.id,
+        effectiveTo:
+          optionalNullableString(
+            body.effectiveTo,
+            "effectiveTo",
+          ),
+        correlationId:
+          optionalNullableString(
+            body.correlationId,
+            "correlationId",
+          ),
+      });
+    },
+  );
 
   app.post(
     "/v1/security/bootstrap",
