@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build -w @caiae/core && npm run build -w @caiae/rules && npm run build -w @caiae/db && npm run build -w @caiae/traceability && npm run build -w @caiae/findings && npm run build -w @caiae/certifications && npm run build -w @caiae/evaluations && npm run build -w @caiae/reporting && npm run build -w @caiae/publication && npm run build -w @caiae/integrations",
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
