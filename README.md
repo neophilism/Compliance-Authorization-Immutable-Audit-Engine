@@ -39,7 +39,9 @@ npm run dev:web
 npm run dev:worker
 ```
 
-The API health endpoint is `GET http://localhost:4000/health`.
+The API liveness endpoint is `GET http://localhost:4000/health`; database/schema readiness is `GET http://localhost:4000/ready`.
+
+For production deployment, migrations, secrets, backup/restore, graceful shutdown, and rollback procedures, see `docs/production-readiness.md`.
 
 ## Design commitments
 

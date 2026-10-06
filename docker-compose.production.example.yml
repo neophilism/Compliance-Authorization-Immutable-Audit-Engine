@@ -1,0 +1,47 @@
+services:
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        CAIAE_API_BASE_URL: http://api:4000
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      PORT: "4000"
+      CAIAE_RUN_MIGRATIONS: "false"
+      CAIAE_CORS_ORIGINS: ${CAIAE_CORS_ORIGINS:-none}
+      CAIAE_TRUST_PROXY: ${CAIAE_TRUST_PROXY:-true}
+      CAIAE_WEBHOOK_MASTER_SECRET: ${CAIAE_WEBHOOK_MASTER_SECRET:?webhook secret is required}
+      CAIAE_BOOTSTRAP_SECRET: ${CAIAE_BOOTSTRAP_SECRET:-}
+      CAIAE_RELEASE_SHA: ${CAIAE_RELEASE_SHA:-local}
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      CAIAE_RUN_MIGRATIONS: "false"
+      CAIAE_WEBHOOK_MASTER_SECRET: ${CAIAE_WEBHOOK_MASTER_SECRET:?webhook secret is required}
+      CAIAE_RELEASE_SHA: ${CAIAE_RELEASE_SHA:-local}
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+      args:
+        CAIAE_API_BASE_URL: http://api:4000
+    environment:
+      NODE_ENV: production
+      CAIAE_API_BASE_URL: http://api:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped

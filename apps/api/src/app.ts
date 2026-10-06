@@ -8,7 +8,12 @@ import {
   CertificationError,
   CertificationService,
 } from "@caiae/certifications";
-import { createPool, DomainRepository, runMigrations } from "@caiae/db";
+import {
+  createPool,
+  DomainRepository,
+  LATEST_SCHEMA_VERSION,
+  runMigrations,
+} from "@caiae/db";
 import {
   ExceptionError,
   ExceptionService,
@@ -69,6 +74,12 @@ function requiredString(value: unknown, field: string): string {
 type BuildAppOptions = {
   securityMode?: "enforce" | "legacy";
   bootstrapSecret?: string | null;
+  runMigrations?: boolean;
+  corsOrigins?: true | false | string[];
+  trustProxy?: boolean;
+  bodyLimitBytes?: number;
+  requestTimeoutMs?: number;
+  releaseSha?: string | null;
 };
 
 const ACTOR_FIELDS = [
@@ -1073,9 +1084,25 @@ function integrationIdempotencyKey(
 export async function buildApp(
   options: BuildAppOptions = {},
 ) {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    trustProxy:
+      options.trustProxy ?? false,
+    bodyLimit:
+      options.bodyLimitBytes ??
+      1_048_576,
+    requestTimeout:
+      options.requestTimeoutMs ??
+      30_000,
+  });
   const pool = createPool();
-  await runMigrations(pool);
+
+  if (
+    options.runMigrations ??
+    true
+  ) {
+    await runMigrations(pool);
+  }
   const repository = new DomainRepository(pool);
   const authorizations = new AuthorizationService(pool);
   const exceptions = new ExceptionService(pool);
@@ -1101,7 +1128,11 @@ export async function buildApp(
         : "enforce"
     );
 
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin:
+      options.corsOrigins ??
+      true,
+  });
 
   async function lookupOrganizationById(
     table: string,
@@ -1455,8 +1486,77 @@ export async function buildApp(
   app.get("/health", async () => ({
     status: "ok",
     service: "api",
+    release:
+      options.releaseSha ??
+      null,
     timestamp: new Date().toISOString(),
   }));
+
+  app.get(
+    "/ready",
+    async (_request, reply) => {
+      try {
+        await pool.query("SELECT 1");
+        const schema =
+          await pool.query(
+            `SELECT 1
+             FROM schema_migrations
+             WHERE version = $1`,
+            [
+              LATEST_SCHEMA_VERSION,
+            ],
+          );
+
+        if (!schema.rows[0]) {
+          return reply
+            .code(503)
+            .send({
+              status:
+                "not_ready",
+              reason:
+                "schema_out_of_date",
+              expectedSchemaVersion:
+                LATEST_SCHEMA_VERSION,
+              service: "api",
+              release:
+                options.releaseSha ??
+                null,
+              timestamp:
+                new Date().toISOString(),
+            });
+        }
+
+        return {
+          status: "ready",
+          schemaVersion:
+            LATEST_SCHEMA_VERSION,
+          service: "api",
+          release:
+            options.releaseSha ??
+            null,
+          timestamp:
+            new Date().toISOString(),
+        };
+      } catch (error) {
+        app.log.error(
+          error,
+          "readiness check failed",
+        );
+        return reply
+          .code(503)
+          .send({
+            status:
+              "not_ready",
+            service: "api",
+            release:
+              options.releaseSha ??
+              null,
+            timestamp:
+              new Date().toISOString(),
+          });
+      }
+    },
+  );
 
   app.get("/openapi.json", async () =>
     buildOpenApiDocument(),

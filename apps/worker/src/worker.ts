@@ -5,43 +5,27 @@ import { DeadlineService } from "@caiae/deadlines";
 import { EvaluationService } from "@caiae/evaluations";
 import { IntegrationService } from "@caiae/integrations";
 import { ExceptionService } from "@caiae/exceptions";
+import {
+  readWorkerRuntimeConfig,
+} from "@caiae/runtime";
 
-const authorizationSweepMs = Number(
-  process.env.AUTHORIZATION_SWEEP_MS ?? 30_000,
-);
-const exceptionSweepMs = Number(
-  process.env.EXCEPTION_SWEEP_MS ?? 30_000,
-);
-const deadlineSweepMs = Number(
-  process.env.DEADLINE_SWEEP_MS ?? 30_000,
-);
-const evaluationSweepMs = Number(
-  process.env.EVALUATION_SWEEP_MS ?? 30_000,
-);
-const certificationSweepMs = Number(
-  process.env.CERTIFICATION_SWEEP_MS ?? 30_000,
-);
-const webhookSweepMs = Number(
-  process.env.WEBHOOK_SWEEP_MS ?? 30_000,
-);
+const runtime =
+  readWorkerRuntimeConfig();
 
-for (const [name, value] of [
-  ["AUTHORIZATION_SWEEP_MS", authorizationSweepMs],
-  ["EXCEPTION_SWEEP_MS", exceptionSweepMs],
-  ["DEADLINE_SWEEP_MS", deadlineSweepMs],
-  ["EVALUATION_SWEEP_MS", evaluationSweepMs],
-  ["CERTIFICATION_SWEEP_MS", certificationSweepMs],
-  ["WEBHOOK_SWEEP_MS", webhookSweepMs],
-] as const) {
-  if (!Number.isFinite(value) || value < 1_000) {
-    throw new Error(
-      `${name} must be a number of at least 1000`,
-    );
-  }
-}
+const {
+  authorizationSweepMs,
+  exceptionSweepMs,
+  deadlineSweepMs,
+  evaluationSweepMs,
+  certificationSweepMs,
+  webhookSweepMs,
+} = runtime;
 
 const pool = createPool();
-await runMigrations(pool);
+
+if (runtime.runMigrations) {
+  await runMigrations(pool);
+}
 
 const authorizations = new AuthorizationService(pool);
 const exceptions = new ExceptionService(pool);
@@ -235,6 +219,8 @@ console.log(
     evaluationSweepMs,
     certificationSweepMs,
     webhookSweepMs,
+    release:
+      runtime.releaseSha,
   }),
 );
 
@@ -271,7 +257,45 @@ const webhookTimer = setInterval(() => {
   void sweepWebhooks();
 }, webhookSweepMs);
 
-async function shutdown(signal: string): Promise<void> {
+let shuttingDown = false;
+
+function anySweepRunning(): boolean {
+  return (
+    authorizationSweepRunning ||
+    exceptionSweepRunning ||
+    deadlineSweepRunning ||
+    evaluationSweepRunning ||
+    certificationSweepRunning ||
+    webhookSweepRunning
+  );
+}
+
+async function waitForSweeps(): Promise<boolean> {
+  const deadline =
+    Date.now() +
+    runtime.shutdownGraceMs;
+
+  while (
+    anySweepRunning() &&
+    Date.now() < deadline
+  ) {
+    await new Promise<void>(
+      (resolve) => {
+        setTimeout(resolve, 50);
+      },
+    );
+  }
+
+  return !anySweepRunning();
+}
+
+async function shutdown(
+  signal: string,
+  exitCode = 0,
+): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   clearInterval(authorizationTimer);
   clearInterval(exceptionTimer);
   clearInterval(deadlineTimer);
@@ -281,20 +305,86 @@ async function shutdown(signal: string): Promise<void> {
 
   console.log(
     JSON.stringify({
-      event: "compliance_worker.stopping",
+      event:
+        "compliance_worker.stopping",
       signal,
-      at: new Date().toISOString(),
+      at:
+        new Date().toISOString(),
+      release:
+        runtime.releaseSha,
     }),
   );
 
+  const drained =
+    await waitForSweeps();
+
+  if (!drained) {
+    console.error(
+      JSON.stringify({
+        event:
+          "compliance_worker.shutdown_grace_exceeded",
+        signal,
+        graceMs:
+          runtime.shutdownGraceMs,
+        at:
+          new Date().toISOString(),
+      }),
+    );
+    process.exitCode = 1;
+  } else {
+    process.exitCode =
+      exitCode;
+  }
+
   await pool.end();
-  process.exit(0);
 }
 
-process.on("SIGTERM", () => {
+process.once("SIGTERM", () => {
   void shutdown("SIGTERM");
 });
 
-process.on("SIGINT", () => {
+process.once("SIGINT", () => {
   void shutdown("SIGINT");
 });
+
+process.once(
+  "uncaughtException",
+  (error) => {
+    console.error(
+      JSON.stringify({
+        event:
+          "compliance_worker.uncaught_exception",
+        at:
+          new Date().toISOString(),
+        message:
+          error.message,
+      }),
+    );
+    void shutdown(
+      "uncaughtException",
+      1,
+    );
+  },
+);
+
+process.once(
+  "unhandledRejection",
+  (reason) => {
+    console.error(
+      JSON.stringify({
+        event:
+          "compliance_worker.unhandled_rejection",
+        at:
+          new Date().toISOString(),
+        message:
+          reason instanceof Error
+            ? reason.message
+            : String(reason),
+      }),
+    );
+    void shutdown(
+      "unhandledRejection",
+      1,
+    );
+  },
+);
