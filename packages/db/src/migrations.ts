@@ -174,6 +174,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
   }
 }
 
+  if (!versions.has("0012_security_permission_hardening")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(SECURITY_PERMISSION_HARDENING_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0012_security_permission_hardening"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
   id uuid PRIMARY KEY,
@@ -1216,4 +1231,71 @@ CREATE INDEX IF NOT EXISTS publication_controls_subject_idx
     subject_type,
     subject_id
   );
+`;
+
+
+const SECURITY_PERMISSION_HARDENING_SQL = `
+CREATE TABLE IF NOT EXISTS security_roles (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  key text NOT NULL,
+  name text NOT NULL,
+  permissions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  system boolean NOT NULL DEFAULT false,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, key),
+  CHECK (jsonb_typeof(permissions) = 'array')
+);
+
+CREATE TABLE IF NOT EXISTS principal_role_assignments (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  role_id uuid NOT NULL REFERENCES security_roles(id),
+  assigned_by_principal_id uuid REFERENCES principals(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    organization_id,
+    principal_id,
+    role_id
+  )
+);
+
+CREATE INDEX IF NOT EXISTS principal_role_assignments_principal_idx
+  ON principal_role_assignments(
+    organization_id,
+    principal_id
+  );
+
+CREATE TABLE IF NOT EXISTS operator_credentials (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  name text NOT NULL,
+  token_prefix text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked')),
+  expires_at timestamptz,
+  last_used_at timestamptz,
+  created_by_principal_id uuid REFERENCES principals(id),
+  revoked_at timestamptz,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS operator_credentials_principal_idx
+  ON operator_credentials(
+    organization_id,
+    principal_id,
+    status
+  );
+
+CREATE INDEX IF NOT EXISTS operator_credentials_active_expiry_idx
+  ON operator_credentials(expires_at)
+  WHERE status = 'active';
 `;
