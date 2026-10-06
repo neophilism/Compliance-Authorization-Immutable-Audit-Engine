@@ -179,13 +179,37 @@ export interface EvidenceAttestation extends BaseEntity {
   revokedAt: ISODateTime | null;
 }
 
+export type CheckTrigger = "manual" | "event" | "scheduled";
+
 export interface Check extends BaseEntity {
   resourceId: EntityId;
   ruleSetId: EntityId | null;
+  scheduleId: EntityId | null;
+  trigger: CheckTrigger;
+  triggerDetail: JsonObject;
+  requestedByPrincipalId: EntityId | null;
   status: "pending" | "running" | "passed" | "failed" | "unknown" | "error";
+  scheduledFor: ISODateTime | null;
   startedAt: ISODateTime | null;
   completedAt: ISODateTime | null;
+  evaluatedAt: ISODateTime | null;
+  ruleSetSnapshot: JsonObject;
+  contextSnapshot: JsonObject;
+  evidenceTrace: JsonObject[];
   result: JsonObject;
+  errorMessage: string | null;
+}
+
+export interface EvaluationSchedule extends BaseEntity {
+  resourceId: EntityId | null;
+  resourceType: string | null;
+  createdByPrincipalId: EntityId | null;
+  ruleSetSnapshot: JsonObject;
+  facts: JsonObject;
+  intervalSeconds: number;
+  nextRunAt: ISODateTime;
+  lastRunAt: ISODateTime | null;
+  active: boolean;
 }
 
 export interface Finding extends BaseEntity {
