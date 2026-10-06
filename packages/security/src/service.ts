@@ -32,6 +32,7 @@ export const STANDARD_ROLE_TEMPLATES = {
     permissions: [
       "organizations.read",
       "policies.*",
+      "rulesets.read",
       "resources.*",
       "checks.*",
       "evidence.*",
@@ -46,6 +47,7 @@ export const STANDARD_ROLE_TEMPLATES = {
     name: "Reviewer",
     permissions: [
       "organizations.read",
+      "rulesets.read",
       "resources.read",
       "checks.read",
       "authorizations.*",
@@ -60,6 +62,7 @@ export const STANDARD_ROLE_TEMPLATES = {
     name: "Publisher",
     permissions: [
       "organizations.read",
+      "rulesets.read",
       "resources.read",
       "findings.read",
       "certifications.read",
@@ -72,6 +75,7 @@ export const STANDARD_ROLE_TEMPLATES = {
     permissions: [
       "organizations.read",
       "policies.read",
+      "rulesets.read",
       "resources.read",
       "checks.read",
       "authorizations.read",
