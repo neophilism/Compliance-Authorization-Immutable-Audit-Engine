@@ -8,7 +8,12 @@ import {
   CertificationError,
   CertificationService,
 } from "@caiae/certifications";
-import { createPool, DomainRepository, runMigrations } from "@caiae/db";
+import {
+  createPool,
+  DomainRepository,
+  LATEST_SCHEMA_VERSION,
+  runMigrations,
+} from "@caiae/db";
 import {
   ExceptionError,
   ExceptionService,
@@ -1499,8 +1504,39 @@ export async function buildApp(
     async (_request, reply) => {
       try {
         await pool.query("SELECT 1");
+        const schema =
+          await pool.query(
+            `SELECT 1
+             FROM schema_migrations
+             WHERE version = $1`,
+            [
+              LATEST_SCHEMA_VERSION,
+            ],
+          );
+
+        if (!schema.rows[0]) {
+          return reply
+            .code(503)
+            .send({
+              status:
+                "not_ready",
+              reason:
+                "schema_out_of_date",
+              expectedSchemaVersion:
+                LATEST_SCHEMA_VERSION,
+              service: "api",
+              release:
+                options.releaseSha ??
+                null,
+              timestamp:
+                new Date().toISOString(),
+            });
+        }
+
         return {
           status: "ready",
+          schemaVersion:
+            LATEST_SCHEMA_VERSION,
           service: "api",
           release:
             options.releaseSha ??
