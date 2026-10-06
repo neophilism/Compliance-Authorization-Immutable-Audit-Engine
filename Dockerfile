@@ -13,7 +13,9 @@ FROM node:20-bookworm-slim AS api
 
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app /app
+COPY --from=build --chown=node:node /app /app
+
+USER node
 
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
@@ -25,7 +27,9 @@ FROM node:20-bookworm-slim AS worker
 
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app /app
+COPY --from=build --chown=node:node /app /app
+
+USER node
 
 CMD ["npm", "run", "start", "-w", "@caiae/worker"]
 
@@ -33,7 +37,9 @@ FROM node:20-bookworm-slim AS web
 
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app /app
+COPY --from=build --chown=node:node /app /app
+
+USER node
 
 EXPOSE 3000
 CMD ["npm", "run", "start", "-w", "@caiae/web"]
