@@ -20,6 +20,6 @@
     "rules:evaluate": "npm run evaluate -w @caiae/rules --"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24 <25"
   }
 }
