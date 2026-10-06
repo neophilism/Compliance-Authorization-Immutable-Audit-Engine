@@ -145,16 +145,38 @@ export interface ExceptionDecision extends BaseEntity {
   decidedAt: ISODateTime;
 }
 
+export type EvidenceStatus = "active" | "superseded" | "revoked";
+
 export interface Evidence extends BaseEntity {
   resourceId: EntityId;
   evidenceType: string;
   title: string;
+  status: EvidenceStatus;
+  submittedByPrincipalId: EntityId | null;
   source: string | null;
   uri: string | null;
+  mediaType: string | null;
+  fileName: string | null;
+  checksumAlgorithm: string | null;
   checksum: string | null;
   capturedAt: ISODateTime | null;
+  validFrom: ISODateTime | null;
   validUntil: ISODateTime | null;
+  provenance: JsonObject;
+  supersedesEvidenceId: EntityId | null;
+  supersededAt: ISODateTime | null;
   attributes: JsonObject;
+}
+
+export interface EvidenceAttestation extends BaseEntity {
+  evidenceId: EntityId;
+  principalId: EntityId;
+  attestationType: string;
+  statement: string;
+  claims: JsonObject;
+  attestedAt: ISODateTime;
+  validUntil: ISODateTime | null;
+  revokedAt: ISODateTime | null;
 }
 
 export interface Check extends BaseEntity {
