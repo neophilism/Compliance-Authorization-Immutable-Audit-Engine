@@ -9,9 +9,9 @@
     "dev:worker": "npm run dev -w @caiae/worker",
     "db:migrate": "npm run migrate -w @caiae/db",
     "db:seed": "npm run seed -w @caiae/db",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/api && npm run build -w @caiae/worker && npm run build -w @caiae/web",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
   "engines": { "node": ">=20" }
