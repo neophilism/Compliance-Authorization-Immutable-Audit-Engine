@@ -144,6 +144,21 @@ export async function runMigrations(pool: Pool): Promise<void> {
   }
 }
 
+  if (!versions.has("0010_api_integration_layer")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(API_INTEGRATION_LAYER_SQL);
+      await pool.query(
+        "INSERT INTO schema_migrations(version) VALUES ($1)",
+        ["0010_api_integration_layer"],
+      );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
 const CORE_DOMAIN_SQL = `
 CREATE TABLE organizations (
   id uuid PRIMARY KEY,
@@ -942,4 +957,192 @@ CREATE INDEX IF NOT EXISTS certifications_supporting_check_idx
 
 CREATE INDEX IF NOT EXISTS certifications_renewed_from_idx
   ON certifications(renewed_from_certification_id);
+`;
+
+
+const API_INTEGRATION_LAYER_SQL = `
+CREATE TABLE IF NOT EXISTS api_credentials (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  principal_id uuid NOT NULL REFERENCES principals(id),
+  name text NOT NULL,
+  token_prefix text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked')),
+  expires_at timestamptz,
+  last_used_at timestamptz,
+  created_by_principal_id uuid REFERENCES principals(id),
+  revoked_at timestamptz,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS api_credentials_principal_idx
+  ON api_credentials(organization_id, principal_id, status);
+
+CREATE TABLE IF NOT EXISTS idempotency_records (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  credential_id uuid NOT NULL REFERENCES api_credentials(id),
+  idempotency_key text NOT NULL,
+  method text NOT NULL,
+  route text NOT NULL,
+  request_hash text NOT NULL,
+  state text NOT NULL DEFAULT 'pending'
+    CHECK (state IN ('pending', 'completed')),
+  response_status integer,
+  response_body jsonb,
+  content_type text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  expires_at timestamptz NOT NULL,
+  UNIQUE (credential_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idempotency_records_expiry_idx
+  ON idempotency_records(expires_at);
+
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  name text NOT NULL,
+  url text NOT NULL,
+  event_types jsonb NOT NULL DEFAULT '["*"]'::jsonb,
+  status text NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'inactive')),
+  created_by_principal_id uuid REFERENCES principals(id),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS integration_events (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  audit_event_id uuid NOT NULL UNIQUE REFERENCES audit_events(id),
+  event_type text NOT NULL,
+  aggregate_type text NOT NULL,
+  aggregate_id uuid NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  occurred_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS integration_events_org_created_idx
+  ON integration_events(organization_id, created_at, id);
+
+CREATE INDEX IF NOT EXISTS integration_events_org_type_idx
+  ON integration_events(organization_id, event_type, created_at, id);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  subscription_id uuid NOT NULL REFERENCES webhook_subscriptions(id),
+  event_id uuid NOT NULL REFERENCES integration_events(id),
+  status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'succeeded', 'failed')),
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  last_attempt_at timestamptz,
+  delivered_at timestamptz,
+  response_status integer,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (subscription_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS webhook_deliveries_due_idx
+  ON webhook_deliveries(next_attempt_at, status)
+  WHERE status IN ('pending', 'failed');
+
+CREATE TABLE IF NOT EXISTS integration_import_records (
+  id uuid PRIMARY KEY,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  source text NOT NULL,
+  entity_type text NOT NULL,
+  external_id text NOT NULL,
+  entity_id uuid NOT NULL,
+  payload_hash text NOT NULL,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (
+    organization_id,
+    source,
+    entity_type,
+    external_id
+  )
+);
+
+CREATE OR REPLACE FUNCTION fanout_audit_event_to_integrations()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  new_event_id uuid;
+BEGIN
+  new_event_id := gen_random_uuid();
+
+  INSERT INTO integration_events(
+    id,
+    organization_id,
+    audit_event_id,
+    event_type,
+    aggregate_type,
+    aggregate_id,
+    payload,
+    occurred_at
+  ) VALUES (
+    new_event_id,
+    NEW.organization_id,
+    NEW.id,
+    NEW.event_type,
+    NEW.aggregate_type,
+    NEW.aggregate_id,
+    jsonb_build_object(
+      'auditEventId', NEW.id,
+      'sequenceNumber', NEW.sequence_number,
+      'actorPrincipalId', NEW.actor_principal_id,
+      'correlationId', NEW.correlation_id,
+      'payload', NEW.payload,
+      'eventHash', NEW.event_hash
+    ),
+    NEW.occurred_at
+  );
+
+  INSERT INTO webhook_deliveries(
+    id,
+    organization_id,
+    subscription_id,
+    event_id
+  )
+  SELECT
+    gen_random_uuid(),
+    subscriptions.organization_id,
+    subscriptions.id,
+    new_event_id
+  FROM webhook_subscriptions AS subscriptions
+  WHERE subscriptions.organization_id = NEW.organization_id
+    AND subscriptions.status = 'active'
+    AND (
+      subscriptions.event_types ? '*'
+      OR subscriptions.event_types ? NEW.event_type
+    );
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS audit_events_integration_fanout
+  ON audit_events;
+
+CREATE TRIGGER audit_events_integration_fanout
+AFTER INSERT ON audit_events
+FOR EACH ROW
+EXECUTE FUNCTION fanout_audit_event_to_integrations();
 `;
