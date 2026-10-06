@@ -4,6 +4,7 @@ export {
   evaluateRuleSet,
 } from "./evaluator.js";
 export {
+  parseEvaluationContext,
   parseRuleSet,
   parseRuleSetText,
 } from "./parser.js";
