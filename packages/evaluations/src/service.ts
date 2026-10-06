@@ -220,15 +220,18 @@ export class EvaluationService {
            resource_id,
            resource_type,
            created_by_principal_id,
+           registered_rule_set_id,
            rule_set_snapshot,
+           rule_set_hash,
+           rule_set_provenance,
            facts,
            interval_seconds,
            next_run_at,
            active,
            metadata
          ) VALUES (
-           $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb,
-           $8, $9, true, $10::jsonb
+           $1, $2, $3, $4, $5, $6, $7::jsonb, $8,
+           $9::jsonb, $10::jsonb, $11, $12, true, $13::jsonb
          )`,
         [
           scheduleId,
@@ -236,14 +239,18 @@ export class EvaluationService {
           input.resourceId ?? null,
           normalizeNullableString(input.resourceType),
           input.createdByPrincipalId ?? null,
+          resolved.registeredRuleSetId,
           JSON.stringify(toJsonObject(ruleSet)),
+          resolved.manifest.definitionHash,
+          JSON.stringify(
+            toJsonObject(resolved.manifest),
+          ),
           JSON.stringify(input.facts ?? {}),
           input.intervalSeconds,
           nextRunAt,
           JSON.stringify(input.metadata ?? {}),
         ],
       );
-
       await appendAuditEventWithClient(client, {
         organizationId: input.organizationId,
         aggregateType: "evaluation_schedule",
@@ -258,6 +265,10 @@ export class EvaluationService {
             normalizeNullableString(input.resourceType),
           ruleSetId: ruleSet.id,
           ruleSetVersion: ruleSet.version,
+          registeredRuleSetId:
+            resolved.registeredRuleSetId,
+          ruleSetHash:
+            resolved.manifest.definitionHash,
           intervalSeconds: input.intervalSeconds,
           nextRunAt,
         },
@@ -490,16 +501,20 @@ export class EvaluationService {
            scheduled_for,
            evaluated_at,
            rule_set_snapshot,
+           rule_set_hash,
+           rule_set_provenance,
            result,
            metadata
          ) VALUES (
-           $1, $2, $3, NULL, $4, $5, $6::jsonb, $7,
-           'pending', $8, $9, $10::jsonb, '{}'::jsonb, $11::jsonb
+           $1, $2, $3, $4, $5, $6, $7::jsonb, $8,
+           'pending', $9, $10, $11::jsonb, $12,
+           $13::jsonb, '{}'::jsonb, $14::jsonb
          )`,
         [
           checkId,
           input.organizationId,
           input.resourceId,
+          registeredRuleSetId,
           input.scheduleId ?? null,
           trigger,
           JSON.stringify(input.triggerDetail ?? {}),
@@ -510,10 +525,13 @@ export class EvaluationService {
           ),
           evaluatedAt,
           JSON.stringify(toJsonObject(ruleSet)),
+          manifest.definitionHash,
+          JSON.stringify(
+            toJsonObject(manifest),
+          ),
           JSON.stringify(input.metadata ?? {}),
         ],
       );
-
       await appendAuditEventWithClient(client, {
         organizationId: input.organizationId,
         aggregateType: "check",
@@ -527,6 +545,9 @@ export class EvaluationService {
           trigger,
           ruleSetId: ruleSet.id,
           ruleSetVersion: ruleSet.version,
+          registeredRuleSetId,
+          ruleSetHash:
+            manifest.definitionHash,
           scheduledFor:
             normalizeOptionalDate(
               input.scheduledFor,
