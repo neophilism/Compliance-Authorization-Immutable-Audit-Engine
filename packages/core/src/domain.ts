@@ -159,6 +159,7 @@ export interface AuditEvent {
   organizationId: EntityId;
   aggregateType: string;
   aggregateId: EntityId;
+  sequenceNumber: number;
   eventType: string;
   actorPrincipalId: EntityId | null;
   occurredAt: ISODateTime;
@@ -166,5 +167,5 @@ export interface AuditEvent {
   correlationId: string | null;
   payload: JsonObject;
   previousEventHash: string | null;
-  eventHash: string | null;
+  eventHash: string;
 }
