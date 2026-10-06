@@ -10,10 +10,13 @@ import {
 } from "react";
 import {
   api,
+  getOperatorToken,
   parseJsonObject,
   post,
+  setOperatorToken,
 } from "../lib/api";
 import type {
+  AuthenticatedOperatorView,
   AuthorizationQueueItem,
   ComplianceReport,
   EvidenceItem,
@@ -94,6 +97,12 @@ export function AdminConsole({
     useState(initialOrganizationId.trim());
   const [section, setSection] =
     useState<Section>("overview");
+  const [operatorToken, setOperatorTokenState] =
+    useState(() => getOperatorToken());
+  const [operatorTokenDraft, setOperatorTokenDraft] =
+    useState("");
+  const [authenticatedOperator, setAuthenticatedOperator] =
+    useState<AuthenticatedOperatorView | null>(null);
   const [report, setReport] =
     useState<ComplianceReport | null>(null);
   const [principals, setPrincipals] = useState<
@@ -124,52 +133,61 @@ export function AdminConsole({
     useState(0);
 
   const loadCore = useCallback(async () => {
-    if (!organizationId) {
+    if (!operatorToken) {
+      setAuthenticatedOperator(null);
       setReport(null);
       return;
     }
 
     setLoading(true);
     try {
+      const me =
+        await api<AuthenticatedOperatorView>(
+          "/v1/security/me",
+        );
+      const nextOrganizationId =
+        organizationId ||
+        me.principal.organizationId;
+
+      if (
+        me.principal.organizationId !==
+        nextOrganizationId
+      ) {
+        throw new Error(
+          "The authenticated operator cannot open a different organization.",
+        );
+      }
+
+      if (!organizationId) {
+        setOrganizationId(
+          nextOrganizationId,
+        );
+        setOrganizationDraft(
+          nextOrganizationId,
+        );
+      }
+
       const [
         nextReport,
         nextPrincipals,
         nextAuthorizations,
       ] = await Promise.all([
         api<ComplianceReport>(
-          `/v1/reports/organizations/${organizationId}/compliance`,
+          `/v1/reports/organizations/${nextOrganizationId}/compliance`,
         ),
         api<Principal[]>(
-          `/v1/organizations/${organizationId}/principals?status=active`,
+          `/v1/organizations/${nextOrganizationId}/principals?status=active`,
         ),
         api<AuthorizationQueueItem[]>(
-          `/v1/organizations/${organizationId}/authorizations`,
+          `/v1/organizations/${nextOrganizationId}/authorizations`,
         ),
       ]);
 
+      setAuthenticatedOperator(me);
       setReport(nextReport);
       setPrincipals(nextPrincipals);
       setAuthorizations(nextAuthorizations);
-
-      setActorId((current) => {
-        if (
-          nextPrincipals.some(
-            (principal) =>
-              principal.id === current,
-          )
-        ) {
-          return current;
-        }
-
-        return (
-          nextPrincipals.find(
-            (principal) =>
-              principal.kind === "user",
-          )?.id ??
-          nextPrincipals[0]?.id ??
-          ""
-        );
-      });
+      setActorId(me.principal.id);
 
       setSelectedResourceId((current) => {
         if (
@@ -196,7 +214,7 @@ export function AdminConsole({
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, operatorToken]);
 
   useEffect(() => {
     void loadCore();
@@ -307,6 +325,31 @@ export function AdminConsole({
     return selectedResourceId;
   }
 
+  function authenticateOperator(
+    event: FormEvent,
+  ) {
+    event.preventDefault();
+    const next =
+      operatorTokenDraft.trim();
+
+    if (!next) return;
+
+    setOperatorToken(next);
+    setOperatorTokenState(next);
+    setOperatorTokenDraft("");
+    setRefreshToken(
+      (value) => value + 1,
+    );
+  }
+
+  function signOutOperator() {
+    setOperatorToken("");
+    setOperatorTokenState("");
+    setAuthenticatedOperator(null);
+    setActorId("");
+    setReport(null);
+  }
+
   function openOrganization(
     event: FormEvent,
   ) {
@@ -351,39 +394,55 @@ export function AdminConsole({
     [authorizations, report],
   );
 
-  if (!organizationId) {
+  if (!operatorToken) {
     return (
       <main className="landing">
         <form
           className="landing-enter"
           style={{
-            width: "min(520px, 100%)",
+            width: "min(560px, 100%)",
             borderRadius: 16,
           }}
-          onSubmit={openOrganization}
+          onSubmit={authenticateOperator}
         >
-          <h2>Open an organization</h2>
+          <h2>Authenticate operator</h2>
           <p>
-            Enter the organization UUID to
-            load its compliance workspace.
+            Enter a CAIAE operator bearer
+            credential. The token is kept only
+            in this browser tab's session
+            storage.
           </p>
           <input
-            className="control"
-            value={organizationDraft}
+            className="control mono"
+            type="password"
+            value={operatorTokenDraft}
             onChange={(event) =>
-              setOrganizationDraft(
+              setOperatorTokenDraft(
                 event.target.value,
               )
             }
-            placeholder="Organization UUID"
+            placeholder="caiau_..."
+            autoComplete="off"
           />
           <button
             className="button"
             type="submit"
           >
-            Open console
+            Open secure console
           </button>
         </form>
+      </main>
+    );
+  }
+
+  if (!organizationId) {
+    return (
+      <main className="landing">
+        <Panel title="Authenticating">
+          <div className="empty">
+            Loading operator workspace…
+          </div>
+        </Panel>
       </main>
     );
   }
@@ -435,12 +494,13 @@ export function AdminConsole({
         </div>
 
         <div className="sidebar-note">
-          This is a policy-neutral reference
-          interface. Authentication and final
-          operator RBAC hardening arrive in PR 16.
-          Until then, the selected principal is
-          passed explicitly to audited workflow
-          endpoints.
+          This policy-neutral reference
+          interface is protected by PR 16
+          operator authentication, organization
+          isolation, and role-derived
+          permissions. Workflow actor identity
+          is bound to the authenticated
+          principal.
         </div>
       </aside>
 
@@ -461,32 +521,18 @@ export function AdminConsole({
           </form>
 
           <div>
-            <label>Acting principal</label>
-            <select
-              className="select"
-              value={actorId}
-              onChange={(event) =>
-                setActorId(
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Select operator
-              </option>
-              {principals.map(
-                (principal) => (
-                  <option
-                    key={principal.id}
-                    value={principal.id}
-                  >
-                    {principal.displayName}
-                    {" — "}
-                    {principal.kind}
-                  </option>
-                ),
-              )}
-            </select>
+            <label>Authenticated operator</label>
+            <div className="control">
+              <strong>
+                {authenticatedOperator?.principal
+                  .displayName ?? "Authenticating…"}
+              </strong>
+              {authenticatedOperator?.roles.length
+                ? ` — ${authenticatedOperator.roles
+                    .map((role) => role.name)
+                    .join(", ")}`
+                : ""}
+            </div>
           </div>
 
           <button
@@ -502,6 +548,14 @@ export function AdminConsole({
             {loading
               ? "Refreshing…"
               : "Refresh"}
+          </button>
+
+          <button
+            className="button secondary"
+            type="button"
+            onClick={signOutOperator}
+          >
+            Sign out
           </button>
         </header>
 
