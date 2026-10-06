@@ -21,7 +21,7 @@
     "@caiae/certifications": "*"
   },
   "devDependencies": {
-    "@types/node": "^22.10.1",
+    "@types/node": "^26.6.4",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
     "typescript": "^7.0.2"
