@@ -4068,7 +4068,15 @@ export async function buildApp(
             body.resourceId,
             "resourceId",
           ),
-          ruleSet: body.ruleSet,
+          ruleSet: integrationOptionalObject(
+            body.ruleSet,
+            "ruleSet",
+          ),
+          registeredRuleSetId:
+            integrationOptionalNullableString(
+              body.registeredRuleSetId,
+              "registeredRuleSetId",
+            ),
           facts: integrationOptionalObject(
             body.facts,
             "facts",
