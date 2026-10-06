@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type {
   Check,
@@ -9,6 +9,7 @@ import type {
 } from "@caiae/core";
 import {
   appendAuditEventWithClient,
+  canonicalJson,
 } from "@caiae/db";
 import { CertificationService } from "@caiae/certifications";
 import { EvidenceService } from "@caiae/evidence";
@@ -45,6 +46,13 @@ export class EvaluationService {
   async run(input: RunCheckInput): Promise<CheckView> {
     validateRunInput(input);
     const ruleSet = normalizeRuleSet(input.ruleSet);
+    if (input.ruleSetRevisionId) {
+      await this.assertRuleSetRevision(
+        input.organizationId,
+        input.ruleSetRevisionId,
+        ruleSet,
+      );
+    }
     const evaluatedAt = input.evaluatedAt
       ? normalizeRequiredDate(input.evaluatedAt, "evaluatedAt")
       : new Date().toISOString();
@@ -166,6 +174,13 @@ export class EvaluationService {
   ): Promise<EvaluationScheduleView> {
     validateScheduleInput(input);
     const ruleSet = normalizeRuleSet(input.ruleSet);
+    if (input.ruleSetRevisionId) {
+      await this.assertRuleSetRevision(
+        input.organizationId,
+        input.ruleSetRevisionId,
+        ruleSet,
+      );
+    }
     const nextRunAt = input.nextRunAt
       ? normalizeRequiredDate(input.nextRunAt, "nextRunAt")
       : new Date().toISOString();
@@ -200,6 +215,7 @@ export class EvaluationService {
            resource_id,
            resource_type,
            created_by_principal_id,
+           rule_set_revision_id,
            rule_set_snapshot,
            facts,
            interval_seconds,
@@ -207,8 +223,8 @@ export class EvaluationService {
            active,
            metadata
          ) VALUES (
-           $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb,
-           $8, $9, true, $10::jsonb
+           $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb,
+           $9, $10, true, $11::jsonb
          )`,
         [
           scheduleId,
@@ -216,6 +232,7 @@ export class EvaluationService {
           input.resourceId ?? null,
           normalizeNullableString(input.resourceType),
           input.createdByPrincipalId ?? null,
+          input.ruleSetRevisionId ?? null,
           JSON.stringify(toJsonObject(ruleSet)),
           JSON.stringify(input.facts ?? {}),
           input.intervalSeconds,
@@ -238,6 +255,8 @@ export class EvaluationService {
             normalizeNullableString(input.resourceType),
           ruleSetId: ruleSet.id,
           ruleSetVersion: ruleSet.version,
+          ruleSetRevisionId:
+            input.ruleSetRevisionId ?? null,
           intervalSeconds: input.intervalSeconds,
           nextRunAt,
         },
@@ -379,6 +398,8 @@ export class EvaluationService {
             organizationId: schedule.organizationId,
             resourceId,
             ruleSet: schedule.ruleSetSnapshot,
+            ruleSetRevisionId:
+              schedule.ruleSetRevisionId,
             requestedByPrincipalId:
               schedule.createdByPrincipalId,
             facts: schedule.facts,
@@ -452,6 +473,7 @@ export class EvaluationService {
            organization_id,
            resource_id,
            rule_set_id,
+           rule_set_revision_id,
            schedule_id,
            trigger,
            trigger_detail,
@@ -463,13 +485,14 @@ export class EvaluationService {
            result,
            metadata
          ) VALUES (
-           $1, $2, $3, NULL, $4, $5, $6::jsonb, $7,
-           'pending', $8, $9, $10::jsonb, '{}'::jsonb, $11::jsonb
+           $1, $2, $3, NULL, $4, $5, $6, $7::jsonb, $8,
+           'pending', $9, $10, $11::jsonb, '{}'::jsonb, $12::jsonb
          )`,
         [
           checkId,
           input.organizationId,
           input.resourceId,
+          input.ruleSetRevisionId ?? null,
           input.scheduleId ?? null,
           trigger,
           JSON.stringify(input.triggerDetail ?? {}),
@@ -497,6 +520,8 @@ export class EvaluationService {
           trigger,
           ruleSetId: ruleSet.id,
           ruleSetVersion: ruleSet.version,
+          ruleSetRevisionId:
+            input.ruleSetRevisionId ?? null,
           scheduledFor:
             normalizeOptionalDate(
               input.scheduledFor,
@@ -513,6 +538,61 @@ export class EvaluationService {
       throw normalizeError(error);
     } finally {
       client.release();
+    }
+  }
+
+  private async assertRuleSetRevision(
+    organizationId: string,
+    ruleSetRevisionId: string,
+    ruleSet: DeclarativeRuleSet,
+  ): Promise<void> {
+    const result = await this.pool.query(
+      `SELECT
+         organization_id,
+         content_hash,
+         declarative_snapshot
+       FROM rule_sets
+       WHERE id = $1`,
+      [ruleSetRevisionId],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new EvaluationError(
+        "not_found",
+        "registered ruleset revision not found",
+      );
+    }
+    if (
+      row.organization_id !==
+      organizationId
+    ) {
+      throw new EvaluationError(
+        "validation",
+        "registered ruleset revision belongs to another organization",
+      );
+    }
+    if (!row.content_hash) {
+      throw new EvaluationError(
+        "validation",
+        "ruleset revision is not traceability-enabled",
+      );
+    }
+
+    const hash = createHash("sha256")
+      .update(
+        canonicalJson(
+          toJsonObject(ruleSet),
+        ),
+        "utf8",
+      )
+      .digest("hex");
+
+    if (hash !== row.content_hash) {
+      throw new EvaluationError(
+        "validation",
+        "ruleset snapshot does not match registered immutable revision",
+      );
     }
   }
 
@@ -1096,6 +1176,8 @@ function mapCheck(row: any): Check {
     organizationId: row.organization_id,
     resourceId: row.resource_id,
     ruleSetId: row.rule_set_id,
+    ruleSetRevisionId:
+      row.rule_set_revision_id ?? null,
     scheduleId: row.schedule_id,
     trigger: row.trigger,
     triggerDetail: row.trigger_detail ?? {},
@@ -1127,6 +1209,8 @@ function mapSchedule(row: any): EvaluationSchedule {
     resourceType: row.resource_type,
     createdByPrincipalId:
       row.created_by_principal_id,
+    ruleSetRevisionId:
+      row.rule_set_revision_id ?? null,
     ruleSetSnapshot:
       row.rule_set_snapshot ?? {},
     facts: row.facts ?? {},
