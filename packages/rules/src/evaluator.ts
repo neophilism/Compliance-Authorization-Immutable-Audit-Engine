@@ -209,7 +209,11 @@ function stableStringify(value: JsonValue): string {
       .join(",")}}`;
   }
 
-  return JSON.stringify(value);
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error("unsupported JSON value");
+  }
+  return serialized;
 }
 
 function and3(values: TriState[]): TriState {
