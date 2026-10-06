@@ -636,7 +636,6 @@ test("resource import is mapping-idempotent, export is portable, and adapters ex
                     "resource.name",
                   operator:
                     "exists",
-                  value: true,
                 },
               },
             ],
