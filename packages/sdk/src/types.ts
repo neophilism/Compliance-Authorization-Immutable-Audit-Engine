@@ -119,6 +119,16 @@ export class SdkError extends Error {
   }
 }
 
+export type UpdateResourceInput = {
+  expectedUpdatedAt: string;
+  name?: string;
+  externalRef?: string | null;
+  status?: Resource["status"];
+  attributes?: JsonObject;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
 export type RunCheckInput = {
   resourceId: string;
   requestedByPrincipalId?: string | null;
