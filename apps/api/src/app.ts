@@ -1022,12 +1022,12 @@ export async function buildApp() {
 
       if (query.status) {
         values.push(query.status);
-        where += ` AND status = ${values.length}`;
+        where += " AND status = $" + values.length;
       }
 
       if (query.kind) {
         values.push(query.kind);
-        where += ` AND kind = ${values.length}`;
+        where += " AND kind = $" + values.length;
       }
 
       const result = await pool.query(
@@ -1102,12 +1102,12 @@ export async function buildApp() {
 
       if (query.status) {
         values.push(query.status);
-        where += ` AND a.status = ${values.length}`;
+        where += " AND a.status = $" + values.length;
       }
 
       if (query.resourceId) {
         values.push(query.resourceId);
-        where += ` AND a.resource_id = ${values.length}`;
+        where += " AND a.resource_id = $" + values.length;
       }
 
       const result = await pool.query(
