@@ -41,6 +41,8 @@ An identical completed request replays the stored result. Reusing the same key f
 
 Resource and event feeds use opaque cursors derived from `created_at + id`.
 
+Database ordering normalizes `created_at` to millisecond precision before applying the UUID tie-breaker. This matches the precision that JavaScript `Date` can round-trip and prevents a row with PostgreSQL microseconds from repeating on the next page.
+
 The cursor is stable across ordinary inserts and does not expose page numbers as synchronization state.
 
 ## Durable event outbox
