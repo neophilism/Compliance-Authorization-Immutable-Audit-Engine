@@ -1,4 +1,7 @@
 import type {
+  Authorization,
+  AuthorizationDecision,
+  AuthorizationDecisionValue,
   ExceptionDecision,
   ExceptionDecisionValue,
   ExceptionKind,
@@ -132,6 +135,60 @@ export type UpdateResourceInput = {
   metadata?: JsonObject;
   correlationId?: string | null;
 };
+
+export type RequestAuthorizationInput = {
+  resourceId: string;
+  authorizationType: string;
+  requestedByPrincipalId: string;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  scope?: JsonObject;
+  conditions?: JsonObject;
+  approvalQuorum?: number;
+  approvalAuthority?: string | null;
+  eligibleApproverPrincipalIds?: string[];
+  emergency?: boolean;
+  emergencyReviewDueAt?: string | null;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type RecordAuthorizationDecisionInput = {
+  principalId: string;
+  decision: AuthorizationDecisionValue;
+  rationale?: string;
+  correlationId?: string | null;
+};
+
+export type RevokeAuthorizationInput = {
+  principalId: string;
+  reason: string;
+  correlationId?: string | null;
+};
+
+export type AuthorizationRecord = {
+  authorization: Authorization;
+  decisions: AuthorizationDecision[];
+  eligibleApproverPrincipalIds: string[];
+  approvalCount: number;
+};
+
+export type AuthorizationEffectiveness =
+  | {
+      effective: true;
+      reason: "approved";
+    }
+  | {
+      effective: false;
+      reason:
+        | "pending"
+        | "denied"
+        | "revoked"
+        | "expired"
+        | "not_yet_valid"
+        | "validity_expired"
+        | "emergency_review_overdue";
+    };
 
 export type RequestExceptionInput = {
   resourceId: string;
