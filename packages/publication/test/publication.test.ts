@@ -24,6 +24,13 @@ async function fixture() {
   const checkId = randomUUID();
   const findingId = randomUUID();
   const certificationId = randomUUID();
+  const certificateNumber =
+    `CERT-${certificationId
+      .replaceAll("-", "")
+      .slice(0, 16)
+      .toUpperCase()}`;
+  const verificationCode =
+    `publication-${certificationId}`;
 
   await pool.query(
     `INSERT INTO organizations(
@@ -171,8 +178,8 @@ async function fixture() {
        $1, $2, $3, $4,
        'generic-compliance',
        'active',
-       'CERT-PUBLIC-001',
-       'publication-test-code',
+       $6,
+       $7,
        $5,
        '2026-10-06T10:10:00Z',
        '2026-10-06T10:10:00Z',
@@ -189,6 +196,8 @@ async function fixture() {
       resourceId,
       checkId,
       principalId,
+      certificateNumber,
+      verificationCode,
     ],
   );
 
@@ -199,6 +208,7 @@ async function fixture() {
     resourceId,
     findingId,
     certificationId,
+    certificateNumber,
     service:
       new PublicationService(pool, {
         now: () =>
@@ -466,7 +476,7 @@ test("certification publication uses only the pre-existing public artifact", asy
 
     assert.equal(
       serialized.includes(
-        "CERT-PUBLIC-001",
+        f.certificateNumber,
       ),
       true,
     );
