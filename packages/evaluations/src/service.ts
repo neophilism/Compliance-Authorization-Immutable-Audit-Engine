@@ -675,6 +675,10 @@ export class EvaluationService {
               evaluatedAt.toISOString(),
             ruleSetId: ruleSet.id,
             ruleSetVersion: ruleSet.version,
+            registeredRuleSetId:
+              check.ruleSetId,
+            ruleSetHash:
+              check.ruleSetHash,
             evidenceIds: evidenceTrace.map(
               (item) => item.evidenceId,
             ),
