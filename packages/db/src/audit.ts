@@ -32,59 +32,7 @@ export class AuditLedger {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-
-      const chainKey = [
-        input.organizationId,
-        input.aggregateType,
-        input.aggregateId,
-      ].join(":");
-
-      await client.query(
-        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        [chainKey],
-      );
-
-      const latest = await client.query(
-        `SELECT *
-         FROM audit_events
-         WHERE organization_id = $1
-           AND aggregate_type = $2
-           AND aggregate_id = $3
-         ORDER BY sequence_number DESC
-         LIMIT 1`,
-        [input.organizationId, input.aggregateType, input.aggregateId],
-      );
-
-      const previous = latest.rows[0] ? mapAuditEvent(latest.rows[0]) : null;
-      if (previous && !previous.eventHash) {
-        throw new Error("cannot append to an unhashed audit chain");
-      }
-
-      const occurredAt = normalizeDate(input.occurredAt ?? new Date().toISOString());
-      const recordedAt = new Date().toISOString();
-      const sequenceNumber = previous ? previous.sequenceNumber + 1 : 1;
-
-      const eventWithoutHash: Omit<AuditEvent, "eventHash"> = {
-        id: randomUUID(),
-        organizationId: input.organizationId,
-        aggregateType: input.aggregateType,
-        aggregateId: input.aggregateId,
-        sequenceNumber,
-        eventType: input.eventType,
-        actorPrincipalId: input.actorPrincipalId ?? null,
-        occurredAt,
-        recordedAt,
-        correlationId: input.correlationId ?? null,
-        payload: input.payload ?? {},
-        previousEventHash: previous?.eventHash ?? null,
-      };
-
-      const event: AuditEvent = {
-        ...eventWithoutHash,
-        eventHash: hashAuditEvent(eventWithoutHash),
-      };
-
-      await insertEvent(client, event);
+      const event = await appendAuditEventWithClient(client, input);
       await client.query("COMMIT");
       return event;
     } catch (error) {
@@ -93,6 +41,13 @@ export class AuditLedger {
     } finally {
       client.release();
     }
+  }
+
+  async appendInTransaction(
+    client: PoolClient,
+    input: AppendAuditEventInput,
+  ): Promise<AuditEvent> {
+    return appendAuditEventWithClient(client, input);
   }
 
   async list(
@@ -122,6 +77,67 @@ export class AuditLedger {
       await this.list(organizationId, aggregateType, aggregateId),
     );
   }
+}
+
+export async function appendAuditEventWithClient(
+  client: PoolClient,
+  input: AppendAuditEventInput,
+): Promise<AuditEvent> {
+  const chainKey = [
+    input.organizationId,
+    input.aggregateType,
+    input.aggregateId,
+  ].join(":");
+
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+    [chainKey],
+  );
+
+  const latest = await client.query(
+    `SELECT *
+     FROM audit_events
+     WHERE organization_id = $1
+       AND aggregate_type = $2
+       AND aggregate_id = $3
+     ORDER BY sequence_number DESC
+     LIMIT 1`,
+    [input.organizationId, input.aggregateType, input.aggregateId],
+  );
+
+  const previous = latest.rows[0] ? mapAuditEvent(latest.rows[0]) : null;
+  if (previous && !previous.eventHash) {
+    throw new Error("cannot append to an unhashed audit chain");
+  }
+
+  const occurredAt = normalizeDate(
+    input.occurredAt ?? new Date().toISOString(),
+  );
+  const recordedAt = new Date().toISOString();
+  const sequenceNumber = previous ? previous.sequenceNumber + 1 : 1;
+
+  const eventWithoutHash: Omit<AuditEvent, "eventHash"> = {
+    id: randomUUID(),
+    organizationId: input.organizationId,
+    aggregateType: input.aggregateType,
+    aggregateId: input.aggregateId,
+    sequenceNumber,
+    eventType: input.eventType,
+    actorPrincipalId: input.actorPrincipalId ?? null,
+    occurredAt,
+    recordedAt,
+    correlationId: input.correlationId ?? null,
+    payload: input.payload ?? {},
+    previousEventHash: previous?.eventHash ?? null,
+  };
+
+  const event: AuditEvent = {
+    ...eventWithoutHash,
+    eventHash: hashAuditEvent(eventWithoutHash),
+  };
+
+  await insertEvent(client, event);
+  return event;
 }
 
 export function hashAuditEvent(
