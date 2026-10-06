@@ -9,8 +9,8 @@
     "start": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test",
-    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization",
-    "prestart": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization"
+    "predev": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions",
+    "prestart": "npm run build -w @caiae/core && npm run build -w @caiae/db && npm run build -w @caiae/authorization && npm run build -w @caiae/exceptions"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@caiae/authorization": "*",
-    "@caiae/db": "*"
+    "@caiae/db": "*",
+    "@caiae/exceptions": "*"
   }
 }
