@@ -250,6 +250,7 @@ export interface DeadlineOccurrence extends BaseEntity {
   cycleNumber: number;
   dueAt: ISODateTime;
   satisfiedAt: ISODateTime;
+  satisfiedByPrincipalId: EntityId;
   outcome: "on_time" | "late";
 }
 
