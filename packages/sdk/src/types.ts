@@ -4,11 +4,15 @@ import type {
   AuthorizationDecisionValue,
   Deadline,
   DeadlineOccurrence,
+  Evidence,
+  EvidenceAttestation,
   DeadlineStatus,
   ExceptionDecision,
   ExceptionDecisionValue,
   ExceptionKind,
   ExceptionRecord,
+  Evidence,
+  EvidenceAttestation,
   Finding,
   FindingStatus,
   JsonObject,
@@ -250,6 +254,56 @@ export type ExceptionEffectiveness =
         | "validity_expired";
     };
 
+export type CreateEvidenceInput = {
+  resourceId: string;
+  evidenceType: string;
+  title: string;
+  submittedByPrincipalId?: string | null;
+  source?: string | null;
+  uri?: string | null;
+  mediaType?: string | null;
+  fileName?: string | null;
+  checksumAlgorithm?: string | null;
+  checksum?: string | null;
+  capturedAt?: string | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  provenance?: JsonObject;
+  supersedesEvidenceId?: string | null;
+  attributes?: JsonObject;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type AddEvidenceAttestationInput = {
+  principalId: string;
+  attestationType: string;
+  statement: string;
+  claims?: JsonObject;
+  attestedAt?: string;
+  validUntil?: string | null;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type RevokeEvidenceInput = {
+  principalId: string;
+  reason: string;
+  correlationId?: string | null;
+};
+
+export type RevokeEvidenceAttestationInput =
+  RevokeEvidenceInput;
+
+export type EvidenceView = {
+  evidence: Evidence;
+  attestations: EvidenceAttestation[];
+};
+
+export type EvidenceTypesResult = {
+  evidenceTypes: string[];
+};
+
 export type CreateDeadlineInput = {
   resourceId?: string | null;
   subjectType: string;
@@ -474,6 +528,23 @@ export type RegisteredRuleSetSummary = {
   effectiveFrom: string | null;
   effectiveTo: string | null;
   [key: string]: unknown;
+};
+
+export type EngineHealth = {
+  status: string;
+  service: string;
+  release?: string | null;
+  timestamp: string;
+};
+
+export type RenderedComplianceFormat =
+  | "csv"
+  | "text";
+
+export type RenderedComplianceReport = {
+  format: RenderedComplianceFormat;
+  mediaType: string;
+  body: string;
 };
 
 export type ComplianceReport = {
