@@ -9,8 +9,12 @@ import type {
   ExceptionDecisionValue,
   ExceptionKind,
   ExceptionRecord,
+  Finding,
+  FindingStatus,
   JsonObject,
   Organization,
+  Remediation,
+  Certification,
   Resource,
 } from "@caiae/core";
 import type {
@@ -302,6 +306,131 @@ export type DeadlineView = {
   occurrences: DeadlineOccurrence[];
 };
 
+export type FindingView = {
+  finding: Finding;
+  remediations: Remediation[];
+};
+
+export type SyncFindingsResult = {
+  findings: Finding[];
+};
+
+export type FindingListFilter = {
+  status?: FindingStatus;
+};
+
+export type AssignFindingOwnerInput = {
+  principalId: string;
+  ownerPrincipalId: string | null;
+  correlationId?: string | null;
+};
+
+export type FindingActionInput = {
+  principalId: string;
+  correlationId?: string | null;
+};
+
+export type DisputeFindingInput =
+  FindingActionInput & {
+    reason: string;
+  };
+
+export type ResolveDisputeInput =
+  FindingActionInput & {
+    outcome: "uphold" | "dismiss";
+    rationale: string;
+  };
+
+export type CreateRemediationInput = {
+  createdByPrincipalId: string;
+  ownerPrincipalId?: string | null;
+  plan: string;
+  dueAt?: string | null;
+  warningWindowSeconds?: number;
+  gracePeriodSeconds?: number;
+  escalationAfterSeconds?: number[];
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type RemediationActionInput = {
+  principalId: string;
+  correlationId?: string | null;
+};
+
+export type VerifyRemediationInput =
+  RemediationActionInput & {
+    note?: string;
+  };
+
+export type RejectRemediationInput =
+  RemediationActionInput & {
+    reason: string;
+  };
+
+export type CancelRemediationInput =
+  RemediationActionInput & {
+    reason: string;
+  };
+
+export type CertificationSeverity =
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
+
+export type CertificationCriteria = {
+  ruleSetId?: string | null;
+  ruleSetVersion?: string | null;
+  maximumCheckAgeSeconds?: number | null;
+  blockingFindingSeverities?: CertificationSeverity[];
+  materialFailureSeverities?: CertificationSeverity[];
+};
+
+export type IssueCertificationInput = {
+  resourceId: string;
+  certificationType: string;
+  supportingCheckId: string;
+  issuedByPrincipalId: string;
+  validFrom?: string;
+  validUntil?: string;
+  validitySeconds?: number;
+  criteria?: CertificationCriteria;
+  conditions?: JsonObject;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type RenewCertificationInput = {
+  supportingCheckId: string;
+  issuedByPrincipalId: string;
+  validFrom?: string;
+  validUntil?: string;
+  validitySeconds?: number;
+  criteria?: CertificationCriteria;
+  conditions?: JsonObject;
+  metadata?: JsonObject;
+  correlationId?: string | null;
+};
+
+export type CertificationActionInput = {
+  principalId: string;
+  reason: string;
+  correlationId?: string | null;
+};
+
+export type ReinstateCertificationInput = {
+  supportingCheckId: string;
+  principalId: string;
+  rationale: string;
+  correlationId?: string | null;
+};
+
+export type CertificationView = {
+  certification: Certification;
+};
+
 export type RunCheckInput = {
   resourceId: string;
   requestedByPrincipalId?: string | null;
@@ -374,14 +503,18 @@ export type ComplianceReport = {
 };
 
 export type {
+  Certification,
   Deadline,
   DeadlineOccurrence,
   DeadlineStatus,
   DeclarativeRuleSet,
+  Finding,
+  FindingStatus,
   JsonObject,
   Organization,
   Paginated,
   RegistryComplianceProjection,
+  Remediation,
   Resource,
   ResourceListOptions,
   ServiceScope,
