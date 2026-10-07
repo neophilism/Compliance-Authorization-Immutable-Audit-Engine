@@ -1,14 +1,26 @@
 import type {
+  AssignFindingOwnerInput,
   AuthorizationEffectiveness,
   AuthorizationRecord,
   CancelDeadlineInput,
+  CancelRemediationInput,
+  Certification,
+  CertificationActionInput,
+  CertificationView,
   ComplianceReport,
   CreateDeadlineInput,
+  CreateRemediationInput,
   Deadline,
   DeadlineStatusSnapshot,
   DeadlineView,
+  DisputeFindingInput,
   ExceptionEffectiveness,
   ExceptionRecordView,
+  Finding,
+  FindingActionInput,
+  FindingListFilter,
+  FindingView,
+  IssueCertificationInput,
   Paginated,
   RecordAuthorizationDecisionInput,
   RecordExceptionDecisionInput,
@@ -18,6 +30,11 @@ import type {
   RequestExceptionInput,
   RevokeAuthorizationInput,
   RevokeExceptionInput,
+  RejectRemediationInput,
+  ReinstateCertificationInput,
+  RemediationActionInput,
+  RenewCertificationInput,
+  ResolveDisputeInput,
   Resource,
   ResourceListOptions,
   RunCheckInput,
@@ -26,7 +43,9 @@ import type {
   SdkRequestOptions,
   SdkResponse,
   SatisfyDeadlineInput,
+  SyncFindingsResult,
   UpdateResourceInput,
+  VerifyRemediationInput,
 } from "./types.js";
 import { SdkError } from "./types.js";
 
@@ -526,6 +545,287 @@ export class ComplianceEngineClient {
     ).data;
   }
 
+  async syncFailedCheckFindings(
+    checkId: string,
+    correlationId?: string | null,
+  ): Promise<SyncFindingsResult> {
+    return (
+      await this.request<
+        SyncFindingsResult
+      >(
+        `/v1/checks/${encodeURIComponent(checkId)}/findings/sync`,
+        {
+          method: "POST",
+          body: {
+            correlationId:
+              correlationId ?? null,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getFinding(
+    findingId: string,
+  ): Promise<FindingView> {
+    return (
+      await this.request<
+        FindingView
+      >(
+        `/v1/findings/${encodeURIComponent(findingId)}`,
+      )
+    ).data;
+  }
+
+  async listFindingsForResource(
+    resourceId: string,
+    filter: FindingListFilter = {},
+  ): Promise<Finding[]> {
+    const organizationId =
+      this.requireOrganizationId();
+    return (
+      await this.request<
+        Finding[]
+      >(
+        `/v1/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/findings`,
+        {
+          query: {
+            status:
+              filter.status,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async assignFindingOwner(
+    findingId: string,
+    input: AssignFindingOwnerInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "owner",
+      input,
+    );
+  }
+
+  async acknowledgeFinding(
+    findingId: string,
+    input: FindingActionInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "acknowledge",
+      input,
+    );
+  }
+
+  async disputeFinding(
+    findingId: string,
+    input: DisputeFindingInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "dispute",
+      input,
+    );
+  }
+
+  async resolveFindingDispute(
+    findingId: string,
+    input: ResolveDisputeInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "resolve-dispute",
+      input,
+    );
+  }
+
+  async createRemediation(
+    findingId: string,
+    input: CreateRemediationInput,
+  ): Promise<FindingView> {
+    return (
+      await this.request<
+        FindingView
+      >(
+        `/v1/findings/${encodeURIComponent(findingId)}/remediations`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async startRemediation(
+    remediationId: string,
+    input: RemediationActionInput,
+  ): Promise<FindingView> {
+    return this.remediationAction(
+      remediationId,
+      "start",
+      input,
+    );
+  }
+
+  async submitRemediationForVerification(
+    remediationId: string,
+    input: RemediationActionInput,
+  ): Promise<FindingView> {
+    return this.remediationAction(
+      remediationId,
+      "submit",
+      input,
+    );
+  }
+
+  async verifyRemediation(
+    remediationId: string,
+    input: VerifyRemediationInput,
+  ): Promise<FindingView> {
+    return this.remediationAction(
+      remediationId,
+      "verify",
+      input,
+    );
+  }
+
+  async rejectRemediation(
+    remediationId: string,
+    input: RejectRemediationInput,
+  ): Promise<FindingView> {
+    return this.remediationAction(
+      remediationId,
+      "reject",
+      input,
+    );
+  }
+
+  async cancelRemediation(
+    remediationId: string,
+    input: CancelRemediationInput,
+  ): Promise<FindingView> {
+    return this.remediationAction(
+      remediationId,
+      "cancel",
+      input,
+    );
+  }
+
+  async closeFinding(
+    findingId: string,
+    input: FindingActionInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "close",
+      input,
+    );
+  }
+
+  async reopenFinding(
+    findingId: string,
+    input: FindingActionInput,
+  ): Promise<FindingView> {
+    return this.findingAction(
+      findingId,
+      "reopen",
+      input,
+    );
+  }
+
+  async issueCertification(
+    input: IssueCertificationInput,
+  ): Promise<CertificationView> {
+    return (
+      await this.request<
+        CertificationView
+      >(
+        "/v1/certifications",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getCertification(
+    certificationId: string,
+  ): Promise<CertificationView> {
+    return (
+      await this.request<
+        CertificationView
+      >(
+        `/v1/certifications/${encodeURIComponent(certificationId)}`,
+      )
+    ).data;
+  }
+
+  async listCertificationsForResource(
+    resourceId: string,
+  ): Promise<Certification[]> {
+    const organizationId =
+      this.requireOrganizationId();
+    return (
+      await this.request<
+        Certification[]
+      >(
+        `/v1/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/certifications`,
+      )
+    ).data;
+  }
+
+  async renewCertification(
+    certificationId: string,
+    input: RenewCertificationInput,
+  ): Promise<CertificationView> {
+    return this.certificationAction(
+      certificationId,
+      "renew",
+      input,
+    );
+  }
+
+  async suspendCertification(
+    certificationId: string,
+    input: CertificationActionInput,
+  ): Promise<CertificationView> {
+    return this.certificationAction(
+      certificationId,
+      "suspend",
+      input,
+    );
+  }
+
+  async reinstateCertification(
+    certificationId: string,
+    input: ReinstateCertificationInput,
+  ): Promise<CertificationView> {
+    return this.certificationAction(
+      certificationId,
+      "reinstate",
+      input,
+    );
+  }
+
+  async revokeCertification(
+    certificationId: string,
+    input: CertificationActionInput,
+  ): Promise<CertificationView> {
+    return this.certificationAction(
+      certificationId,
+      "revoke",
+      input,
+    );
+  }
+
   async runCheck(
     input: RunCheckInput,
   ): Promise<RunCheckResult> {
@@ -673,6 +973,60 @@ export class ComplianceEngineClient {
         Record<string, unknown>
       >(
         `/v1/public/publications/${encodeURIComponent(publicationId)}`,
+      )
+    ).data;
+  }
+
+  private async findingAction(
+    findingId: string,
+    action: string,
+    body: unknown,
+  ): Promise<FindingView> {
+    return (
+      await this.request<
+        FindingView
+      >(
+        `/v1/findings/${encodeURIComponent(findingId)}/${action}`,
+        {
+          method: "POST",
+          body,
+        },
+      )
+    ).data;
+  }
+
+  private async remediationAction(
+    remediationId: string,
+    action: string,
+    body: unknown,
+  ): Promise<FindingView> {
+    return (
+      await this.request<
+        FindingView
+      >(
+        `/v1/remediations/${encodeURIComponent(remediationId)}/${action}`,
+        {
+          method: "POST",
+          body,
+        },
+      )
+    ).data;
+  }
+
+  private async certificationAction(
+    certificationId: string,
+    action: string,
+    body: unknown,
+  ): Promise<CertificationView> {
+    return (
+      await this.request<
+        CertificationView
+      >(
+        `/v1/certifications/${encodeURIComponent(certificationId)}/${action}`,
+        {
+          method: "POST",
+          body,
+        },
       )
     ).data;
   }
