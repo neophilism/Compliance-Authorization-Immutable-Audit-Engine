@@ -5,15 +5,21 @@ import type {
   CancelDeadlineInput,
   CancelRemediationInput,
   Certification,
+  AddEvidenceAttestationInput,
   CertificationActionInput,
   CertificationView,
   ComplianceReport,
   CreateDeadlineInput,
+  CreateEvidenceInput,
   CreateRemediationInput,
   Deadline,
   DeadlineStatusSnapshot,
   DeadlineView,
   DisputeFindingInput,
+  EngineHealth,
+  Evidence,
+  EvidenceTypesResult,
+  EvidenceView,
   ExceptionEffectiveness,
   ExceptionRecordView,
   Finding,
@@ -30,6 +36,8 @@ import type {
   RequestExceptionInput,
   RevokeAuthorizationInput,
   RevokeExceptionInput,
+  RevokeEvidenceAttestationInput,
+  RevokeEvidenceInput,
   RejectRemediationInput,
   ReinstateCertificationInput,
   RemediationActionInput,
@@ -37,6 +45,8 @@ import type {
   ResolveDisputeInput,
   Resource,
   ResourceListOptions,
+  RenderedComplianceFormat,
+  RenderedComplianceReport,
   RunCheckInput,
   RunCheckResult,
   SdkClientOptions,
@@ -191,6 +201,14 @@ export class ComplianceEngineClient {
     }
   }
 
+  async getHealth(): Promise<EngineHealth> {
+    return (
+      await this.request<
+        EngineHealth
+      >("/health")
+    ).data;
+  }
+
   async getOrganization(
     id =
       this.requireOrganizationId(),
@@ -270,6 +288,127 @@ export class ComplianceEngineClient {
         `/v1/resources/${encodeURIComponent(resourceId)}`,
         {
           method: "PATCH",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async createEvidence(
+    input: CreateEvidenceInput,
+  ): Promise<EvidenceView> {
+    return (
+      await this.request<
+        EvidenceView
+      >(
+        "/v1/evidence",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getEvidence(
+    evidenceId: string,
+  ): Promise<EvidenceView> {
+    return (
+      await this.request<
+        EvidenceView
+      >(
+        `/v1/evidence/${encodeURIComponent(evidenceId)}`,
+      )
+    ).data;
+  }
+
+  async listEvidenceForResource(
+    resourceId: string,
+  ): Promise<Evidence[]> {
+    const organizationId =
+      this.requireOrganizationId();
+
+    return (
+      await this.request<
+        Evidence[]
+      >(
+        `/v1/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/evidence`,
+      )
+    ).data;
+  }
+
+  async listValidEvidenceTypesForResource(
+    resourceId: string,
+    at?: string,
+  ): Promise<string[]> {
+    const organizationId =
+      this.requireOrganizationId();
+    const result =
+      (
+        await this.request<
+          EvidenceTypesResult
+        >(
+          `/v1/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/evidence-types`,
+          {
+            query: {
+              at,
+            },
+          },
+        )
+      ).data;
+
+    return result.evidenceTypes;
+  }
+
+  async addEvidenceAttestation(
+    evidenceId: string,
+    input: AddEvidenceAttestationInput,
+  ): Promise<EvidenceView> {
+    return (
+      await this.request<
+        EvidenceView
+      >(
+        `/v1/evidence/${encodeURIComponent(evidenceId)}/attestations`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async revokeEvidence(
+    evidenceId: string,
+    input: RevokeEvidenceInput,
+  ): Promise<EvidenceView> {
+    return (
+      await this.request<
+        EvidenceView
+      >(
+        `/v1/evidence/${encodeURIComponent(evidenceId)}/revoke`,
+        {
+          method: "POST",
+          body: input,
+        },
+      )
+    ).data;
+  }
+
+  async revokeEvidenceAttestation(
+    attestationId: string,
+    input: RevokeEvidenceAttestationInput,
+  ): Promise<EvidenceView> {
+    return (
+      await this.request<
+        EvidenceView
+      >(
+        `/v1/evidence-attestations/${encodeURIComponent(attestationId)}/revoke`,
+        {
+          method: "POST",
           body: input,
         },
       )
@@ -890,6 +1029,7 @@ export class ComplianceEngineClient {
 
   async getComplianceReport(
     resourceId?: string,
+    asOf?: string,
   ): Promise<ComplianceReport> {
     const organizationId =
       this.requireOrganizationId();
@@ -901,8 +1041,50 @@ export class ComplianceEngineClient {
     return (
       await this.request<
         ComplianceReport
-      >(path)
+      >(
+        path,
+        {
+          query: {
+            asOf,
+          },
+        },
+      )
     ).data;
+  }
+
+  async getRenderedComplianceReport(
+    format: RenderedComplianceFormat,
+    resourceId?: string,
+    asOf?: string,
+  ): Promise<RenderedComplianceReport> {
+    const organizationId =
+      this.requireOrganizationId();
+    const path =
+      resourceId
+        ? `/v1/reports/organizations/${organizationId}/resources/${encodeURIComponent(resourceId)}/compliance`
+        : `/v1/reports/organizations/${organizationId}/compliance`;
+    const response =
+      await this.request<string>(
+        path,
+        {
+          query: {
+            format,
+            asOf,
+          },
+        },
+      );
+
+    return {
+      format,
+      mediaType:
+        response.headers.get(
+          "content-type",
+        ) ??
+        (format === "csv"
+          ? "text/csv; charset=utf-8"
+          : "text/plain; charset=utf-8"),
+      body: response.data,
+    };
   }
 
   async getRegistryProjection(
