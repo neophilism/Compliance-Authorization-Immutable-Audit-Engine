@@ -535,6 +535,93 @@ export type EngineHealth = {
   timestamp: string;
 };
 
+export type PublicationState =
+  | "private"
+  | "published";
+
+export type PublicationPolicy = {
+  omitPaths?: string[];
+  replacements?: JsonObject;
+};
+
+export type PublicationListOptions = {
+  subjectType?: string | null;
+  subjectId?: string | null;
+  projectionType?: string | null;
+};
+
+export type PreviewPublicationInput = {
+  subjectType: string;
+  subjectId: string;
+  projectionType: string;
+  asOf?: string;
+  policy?: PublicationPolicy;
+};
+
+export type PublishPublicationInput =
+  PreviewPublicationInput & {
+    principalId: string;
+    correlationId?: string | null;
+  };
+
+export type UnpublishPublicationInput = {
+  subjectType: string;
+  subjectId: string;
+  projectionType: string;
+  principalId: string;
+  reason?: string | null;
+  correlationId?: string | null;
+};
+
+export type PublicationPreview = {
+  schemaVersion: "1";
+  organizationId: string;
+  subjectType: string;
+  subjectId: string;
+  projectionType: string;
+  asOf: string;
+  policy: {
+    omitPaths: string[];
+    replacements: JsonObject;
+  };
+  projectionHash: string;
+  projection: JsonObject;
+};
+
+export type PublicationRecord = {
+  id: string;
+  organizationId: string;
+  subjectType: string;
+  subjectId: string;
+  projectionType: string;
+  state: PublicationState;
+  revision: number;
+  projection: JsonObject;
+  projectionHash: string;
+  policy: {
+    omitPaths: string[];
+    replacements: JsonObject;
+  };
+  publishedAt: string | null;
+  publishedByPrincipalId: string | null;
+  unpublishedAt: string | null;
+  unpublishedByPrincipalId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PublicPublication = {
+  id: string;
+  organizationId: string;
+  subjectType: string;
+  subjectId: string;
+  projectionType: string;
+  revision: number;
+  projectionHash: string;
+  publishedAt: string;
+  projection: JsonObject;
+};
+
 export type RenderedComplianceFormat =
   | "csv"
   | "text";
