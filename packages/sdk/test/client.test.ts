@@ -1138,3 +1138,310 @@ test("operator client exposes typed deadline lifecycle methods", async () => {
     /\/cancel$/,
   );
 });
+
+test("operator client exposes typed publication lifecycle and public listing", async () => {
+  const calls:
+    Array<{
+      url: string;
+      init?: RequestInit;
+    }> = [];
+  const publicationId =
+    "77777777-7777-4777-8777-777777777777";
+  const subjectId =
+    "22222222-2222-4222-8222-222222222222";
+  const record = {
+    id: publicationId,
+    organizationId: ORG,
+    subjectType: "resource",
+    subjectId,
+    projectionType:
+      "resource_compliance",
+    state: "published",
+    revision: 1,
+    projection: {
+      resource: {
+        id: subjectId,
+      },
+    },
+    projectionHash:
+      "abc123",
+    policy: {
+      omitPaths: [
+        "resource.attributes.internal",
+      ],
+      replacements: {},
+    },
+    publishedAt:
+      "2026-10-08T01:00:00.000Z",
+    publishedByPrincipalId:
+      "principal-1",
+    unpublishedAt: null,
+    unpublishedByPrincipalId:
+      null,
+    createdAt:
+      "2026-10-08T01:00:00.000Z",
+    updatedAt:
+      "2026-10-08T01:00:00.000Z",
+  };
+  const preview = {
+    schemaVersion: "1",
+    organizationId: ORG,
+    subjectType: "resource",
+    subjectId,
+    projectionType:
+      "resource_compliance",
+    asOf:
+      "2026-10-08T01:00:00.000Z",
+    policy: record.policy,
+    projectionHash:
+      record.projectionHash,
+    projection:
+      record.projection,
+  };
+  const publicRecord = {
+    id: publicationId,
+    organizationId: ORG,
+    subjectType:
+      record.subjectType,
+    subjectId,
+    projectionType:
+      record.projectionType,
+    revision: 1,
+    projectionHash:
+      record.projectionHash,
+    publishedAt:
+      record.publishedAt,
+    projection:
+      record.projection,
+  };
+
+  const client =
+    createOperatorClient({
+      baseUrl:
+        "https://engine.example",
+      organizationId: ORG,
+      token:
+        "caiau_operator_secret",
+      transport: {
+        fetchImpl:
+          async (
+            input,
+            init,
+          ) => {
+            const url =
+              String(input);
+            calls.push({
+              url,
+              init,
+            });
+
+            if (
+              url.endsWith(
+                "/v1/publications/preview",
+              )
+            ) {
+              return json(
+                preview,
+              );
+            }
+            if (
+              url.includes(
+                "/v1/public/organizations/",
+              )
+            ) {
+              return json([
+                publicRecord,
+              ]);
+            }
+            if (
+              url.includes(
+                "/v1/public/publications/",
+              )
+            ) {
+              return json(
+                publicRecord,
+              );
+            }
+            if (
+              url.includes(
+                "/v1/organizations/",
+              )
+            ) {
+              return json([
+                record,
+              ]);
+            }
+            return json(record);
+          },
+      },
+    });
+
+  const previewed =
+    await client.previewPublication({
+      subjectType:
+        "resource",
+      subjectId,
+      projectionType:
+        "resource_compliance",
+      policy: {
+        omitPaths: [
+          "resource.attributes.internal",
+        ],
+      },
+    });
+  assert.equal(
+    previewed.projectionHash,
+    "abc123",
+  );
+
+  const published =
+    await client.publishPublication({
+      subjectType:
+        "resource",
+      subjectId,
+      projectionType:
+        "resource_compliance",
+      principalId:
+        "principal-1",
+      policy: {
+        omitPaths: [
+          "resource.attributes.internal",
+        ],
+      },
+      correlationId:
+        "sdk-publication-publish",
+    });
+  assert.equal(
+    published.state,
+    "published",
+  );
+
+  await client.getPublication(
+    publicationId,
+  );
+
+  const listed =
+    await client.listPublications({
+      subjectType:
+        "resource",
+      subjectId,
+      projectionType:
+        "resource_compliance",
+    });
+  assert.equal(
+    listed.length,
+    1,
+  );
+
+  const publicProjection =
+    await client.getPublishedProjection(
+      publicationId,
+    );
+  assert.equal(
+    publicProjection.revision,
+    1,
+  );
+
+  const publicListed =
+    await client.listPublishedProjections({
+      subjectType:
+        "resource",
+    });
+  assert.equal(
+    publicListed.length,
+    1,
+  );
+
+  await client.unpublishPublication({
+    subjectType:
+      "resource",
+    subjectId,
+    projectionType:
+      "resource_compliance",
+    principalId:
+      "principal-1",
+    reason:
+      "Replace public projection",
+  });
+
+  assert.equal(
+    calls.length,
+    7,
+  );
+
+  const previewBody =
+    JSON.parse(
+      String(
+        calls[0]!.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    previewBody.organizationId,
+    ORG,
+  );
+
+  const publishBody =
+    JSON.parse(
+      String(
+        calls[1]!.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    publishBody.organizationId,
+    ORG,
+  );
+  assert.equal(
+    publishBody.correlationId,
+    "sdk-publication-publish",
+  );
+
+  assert.match(
+    calls[3]!.url,
+    new RegExp(
+      "/v1/organizations/" +
+        ORG +
+        "/publications\\?subjectType=resource&subjectId=" +
+        subjectId +
+        "&projectionType=resource_compliance$",
+    ),
+  );
+  assert.match(
+    calls[5]!.url,
+    new RegExp(
+      "/v1/public/organizations/" +
+        ORG +
+        "/publications\\?subjectType=resource$",
+    ),
+  );
+
+  const unpublishBody =
+    JSON.parse(
+      String(
+        calls[6]!.init
+          ?.body,
+      ),
+    );
+  assert.equal(
+    unpublishBody.reason,
+    "Replace public projection",
+  );
+});
+
+function json(
+  value: unknown,
+  status = 200,
+): Response {
+  return new Response(
+    JSON.stringify(value),
+    {
+      status,
+      headers: {
+        "content-type":
+          "application/json",
+      },
+    },
+  );
+}
+
