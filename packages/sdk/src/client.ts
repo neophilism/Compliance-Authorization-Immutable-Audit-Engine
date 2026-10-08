@@ -28,6 +28,12 @@ import type {
   FindingView,
   IssueCertificationInput,
   Paginated,
+  PreviewPublicationInput,
+  PublicationListOptions,
+  PublicationPreview,
+  PublicationRecord,
+  PublicPublication,
+  PublishPublicationInput,
   RecordAuthorizationDecisionInput,
   RecordExceptionDecisionInput,
   RegisteredRuleSetSummary,
@@ -54,6 +60,7 @@ import type {
   SdkResponse,
   SatisfyDeadlineInput,
   SyncFindingsResult,
+  UnpublishPublicationInput,
   UpdateResourceInput,
   VerifyRemediationInput,
 } from "./types.js";
@@ -1131,6 +1138,107 @@ export class ComplianceEngineClient {
     ).data;
   }
 
+  async previewPublication(
+    input: PreviewPublicationInput,
+  ): Promise<PublicationPreview> {
+    return (
+      await this.request<
+        PublicationPreview
+      >(
+        "/v1/publications/preview",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async publishPublication(
+    input: PublishPublicationInput,
+  ): Promise<PublicationRecord> {
+    return (
+      await this.request<
+        PublicationRecord
+      >(
+        "/v1/publications/publish",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async unpublishPublication(
+    input: UnpublishPublicationInput,
+  ): Promise<PublicationRecord> {
+    return (
+      await this.request<
+        PublicationRecord
+      >(
+        "/v1/publications/unpublish",
+        {
+          method: "POST",
+          body: {
+            organizationId:
+              this.requireOrganizationId(),
+            ...input,
+          },
+        },
+      )
+    ).data;
+  }
+
+  async getPublication(
+    publicationId: string,
+  ): Promise<PublicationRecord> {
+    return (
+      await this.request<
+        PublicationRecord
+      >(
+        `/v1/publications/${encodeURIComponent(publicationId)}`,
+      )
+    ).data;
+  }
+
+  async listPublications(
+    options:
+      PublicationListOptions = {},
+  ): Promise<PublicationRecord[]> {
+    const organizationId =
+      this.requireOrganizationId();
+
+    return (
+      await this.request<
+        PublicationRecord[]
+      >(
+        `/v1/organizations/${organizationId}/publications`,
+        {
+          query: {
+            subjectType:
+              options.subjectType ??
+              undefined,
+            subjectId:
+              options.subjectId ??
+              undefined,
+            projectionType:
+              options.projectionType ??
+              undefined,
+          },
+        },
+      )
+    ).data;
+  }
+
   async publicVerifyCertification(
     code: string,
   ): Promise<
@@ -1147,14 +1255,41 @@ export class ComplianceEngineClient {
 
   async getPublishedProjection(
     publicationId: string,
-  ): Promise<
-    Record<string, unknown>
-  > {
+  ): Promise<PublicPublication> {
     return (
       await this.request<
-        Record<string, unknown>
+        PublicPublication
       >(
         `/v1/public/publications/${encodeURIComponent(publicationId)}`,
+      )
+    ).data;
+  }
+
+  async listPublishedProjections(
+    options:
+      PublicationListOptions = {},
+  ): Promise<PublicPublication[]> {
+    const organizationId =
+      this.requireOrganizationId();
+
+    return (
+      await this.request<
+        PublicPublication[]
+      >(
+        `/v1/public/organizations/${organizationId}/publications`,
+        {
+          query: {
+            subjectType:
+              options.subjectType ??
+              undefined,
+            subjectId:
+              options.subjectId ??
+              undefined,
+            projectionType:
+              options.projectionType ??
+              undefined,
+          },
+        },
       )
     ).data;
   }
