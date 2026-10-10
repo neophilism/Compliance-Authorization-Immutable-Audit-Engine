@@ -13,6 +13,7 @@ import {
   DomainRepository,
   LATEST_SCHEMA_VERSION,
   runMigrations,
+  assessWorkerHealth,
 } from "@caiae/db";
 import {
   ExceptionError,
@@ -1524,6 +1525,20 @@ export async function buildApp(
               timestamp:
                 new Date().toISOString(),
             });
+        }
+
+        const workerQuery = _request.query as { includeWorker?: string };
+        if (workerQuery?.includeWorker === "true") {
+          const workerHealth = await assessWorkerHealth(pool, 180_000, options.releaseSha ?? null);
+          if (!workerHealth.healthy) {
+            return reply.code(503).send({
+              status: "not_ready",
+              reason: "worker_unhealthy",
+              service: "api",
+              release: options.releaseSha ?? null,
+              timestamp: new Date().toISOString(),
+            });
+          }
         }
 
         return {

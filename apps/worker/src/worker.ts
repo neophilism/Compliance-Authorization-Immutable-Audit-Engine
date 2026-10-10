@@ -1,6 +1,7 @@
 import { AuthorizationService } from "@caiae/authorization";
 import { CertificationService } from "@caiae/certifications";
-import { createPool, runMigrations } from "@caiae/db";
+import { randomUUID } from "node:crypto";
+import { createPool, runMigrations, startWorkerActivity, recordWorkerSweep } from "@caiae/db";
 import { DeadlineService } from "@caiae/deadlines";
 import { EvaluationService } from "@caiae/evaluations";
 import { IntegrationService } from "@caiae/integrations";
@@ -27,6 +28,9 @@ if (runtime.runMigrations) {
   await runMigrations(pool);
 }
 
+const workerInstanceId = randomUUID();
+await startWorkerActivity(pool, workerInstanceId, runtime.releaseSha);
+
 const authorizations = new AuthorizationService(pool);
 const exceptions = new ExceptionService(pool);
 const deadlines = new DeadlineService(pool);
@@ -45,8 +49,10 @@ async function sweepAuthorizations(): Promise<void> {
   if (authorizationSweepRunning) return;
   authorizationSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await authorizations.expireDue(new Date());
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -65,7 +71,11 @@ async function sweepAuthorizations(): Promise<void> {
       }),
     );
   } finally {
-    authorizationSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "authorization", succeeded });
+    } finally {
+      authorizationSweepRunning = false;
+    }
   }
 }
 
@@ -73,8 +83,10 @@ async function sweepExceptions(): Promise<void> {
   if (exceptionSweepRunning) return;
   exceptionSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await exceptions.expireDue(new Date());
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -93,7 +105,11 @@ async function sweepExceptions(): Promise<void> {
       }),
     );
   } finally {
-    exceptionSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "exception", succeeded });
+    } finally {
+      exceptionSweepRunning = false;
+    }
   }
 }
 
@@ -101,8 +117,10 @@ async function sweepDeadlines(): Promise<void> {
   if (deadlineSweepRunning) return;
   deadlineSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await deadlines.sweep(new Date());
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -121,7 +139,11 @@ async function sweepDeadlines(): Promise<void> {
       }),
     );
   } finally {
-    deadlineSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "deadline", succeeded });
+    } finally {
+      deadlineSweepRunning = false;
+    }
   }
 }
 
@@ -129,8 +151,10 @@ async function sweepEvaluations(): Promise<void> {
   if (evaluationSweepRunning) return;
   evaluationSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await evaluations.runDueSchedules(new Date());
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -149,7 +173,11 @@ async function sweepEvaluations(): Promise<void> {
       }),
     );
   } finally {
-    evaluationSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "evaluation", succeeded });
+    } finally {
+      evaluationSweepRunning = false;
+    }
   }
 }
 
@@ -157,8 +185,10 @@ async function sweepCertifications(): Promise<void> {
   if (certificationSweepRunning) return;
   certificationSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await certifications.sweep(new Date());
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -177,7 +207,11 @@ async function sweepCertifications(): Promise<void> {
       }),
     );
   } finally {
-    certificationSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "certification", succeeded });
+    } finally {
+      certificationSweepRunning = false;
+    }
   }
 }
 
@@ -185,8 +219,10 @@ async function sweepWebhooks(): Promise<void> {
   if (webhookSweepRunning) return;
   webhookSweepRunning = true;
 
+  let succeeded = false;
   try {
     const result = await integrations.deliverPendingWebhooks(50);
+    succeeded = true;
 
     console.log(
       JSON.stringify({
@@ -205,7 +241,11 @@ async function sweepWebhooks(): Promise<void> {
       }),
     );
   } finally {
-    webhookSweepRunning = false;
+    try {
+      await recordWorkerSweep(pool, { instanceId: workerInstanceId, name: "webhook", succeeded });
+    } finally {
+      webhookSweepRunning = false;
+    }
   }
 }
 

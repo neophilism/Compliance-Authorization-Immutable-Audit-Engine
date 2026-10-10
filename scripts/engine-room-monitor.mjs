@@ -20,7 +20,7 @@ export function p95(values) {
 
 export async function probeApi(origin, { count = 5, fetchImpl = fetch } = {}) {
   if (!Number.isInteger(count) || count < 1 || count > 20) throw new Error("Invalid probe count");
-  const url = httpsOrigin(origin, "CAIAE_MONITOR_API_URL") + "/ready";
+  const url = httpsOrigin(origin, "CAIAE_MONITOR_API_URL") + "/ready?includeWorker=true";
   let success = 0;
   const latencies = [];
   for (let i = 0; i < count; i++) {
