@@ -98,7 +98,7 @@ export function readApiRuntimeConfig(
     releaseSha:
       nonEmpty(
         env.CAIAE_RELEASE_SHA,
-      ),
+      ) ?? nonEmpty(env.RENDER_GIT_COMMIT),
   };
 }
 
@@ -161,7 +161,7 @@ export function readWorkerRuntimeConfig(
     releaseSha:
       nonEmpty(
         env.CAIAE_RELEASE_SHA,
-      ),
+      ) ?? nonEmpty(env.RENDER_GIT_COMMIT),
   };
 }
 
