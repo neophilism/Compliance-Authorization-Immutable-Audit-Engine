@@ -177,3 +177,18 @@ test("worker validates sweep cadence and shares production secret checks", () =>
     /between 1000/,
   );
 });
+
+test("Render deployment commit is used as release identity without overriding explicit release", () => {
+  const env = {
+    NODE_ENV: "production",
+    DATABASE_URL,
+    CAIAE_WEBHOOK_MASTER_SECRET: "x".repeat(64),
+    RENDER_GIT_COMMIT: "a".repeat(40),
+  };
+  assert.equal(readApiRuntimeConfig(env).releaseSha, "a".repeat(40));
+  assert.equal(readWorkerRuntimeConfig(env).releaseSha, "a".repeat(40));
+  assert.equal(readApiRuntimeConfig({
+    ...env,
+    CAIAE_RELEASE_SHA: "b".repeat(40),
+  }).releaseSha, "b".repeat(40));
+});

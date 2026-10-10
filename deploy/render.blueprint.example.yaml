@@ -1,0 +1,67 @@
+# Example only. Not auto-applied. Paid starter services incur charges.
+# Set DATABASE_URL to pooled Neon URL, DATABASE_URL_UNPOOLED to direct Neon URL.
+# Explicitly review costs, security and desired workspace before copying to render.yaml.
+services:
+  - type: web
+    name: caiae-api
+    runtime: node
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    buildCommand: npm install && npm run build
+    preDeployCommand: DATABASE_URL="$DATABASE_URL_UNPOOLED" npm run db:migrate
+    startCommand: npm run start -w @caiae/api
+    healthCheckPath: /ready
+    envVars:
+      - fromGroup: caiae-runtime
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: CAIAE_CORS_ORIGINS
+        value: none
+      - key: CAIAE_BOOTSTRAP_SECRET
+        sync: false
+
+  - type: worker
+    name: caiae-worker
+    runtime: node
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -w @caiae/worker
+    envVars:
+      - fromGroup: caiae-runtime
+      - key: DATABASE_URL
+        sync: false
+
+  - type: web
+    name: caiae-admin
+    runtime: node
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -w @caiae/web
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: CAIAE_API_BASE_URL
+        fromService:
+          type: web
+          name: caiae-api
+          envVarKey: RENDER_EXTERNAL_URL
+
+envVarGroups:
+  - name: caiae-runtime
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: CAIAE_RUN_MIGRATIONS
+        value: false
+      - key: CAIAE_WEBHOOK_MASTER_SECRET
+        generateValue: true
