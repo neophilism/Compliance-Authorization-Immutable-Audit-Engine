@@ -1,0 +1,31 @@
+name: Engine Room Production Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: caiae-production-monitor
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: vars.CAIAE_MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Probe production readiness and report measured telemetry
+        run: node scripts/engine-room-monitor.mjs
+        env:
+          CAIAE_MONITOR_API_URL: ${{ vars.CAIAE_MONITOR_API_URL }}
+          ENGINE_ROOM_BASE_URL: ${{ vars.ENGINE_ROOM_BASE_URL }}
+          ENGINE_ROOM_TELEMETRY_KEY_ID: ${{ secrets.ENGINE_ROOM_TELEMETRY_KEY_ID }}
+          ENGINE_ROOM_TELEMETRY_SECRET: ${{ secrets.ENGINE_ROOM_TELEMETRY_SECRET }}
