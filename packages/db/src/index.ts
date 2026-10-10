@@ -31,3 +31,7 @@ export type {
   SignedAuditCheckpoint,
   CheckpointVerification,
 } from "./audit-anchor.js";
+export {
+  WORKER_SWEEP_NAMES, startWorkerActivity, recordWorkerSweep, assessWorkerHealth,
+} from "./worker-health.js";
+export type { WorkerSweepName, WorkerHealthVerdict } from "./worker-health.js";

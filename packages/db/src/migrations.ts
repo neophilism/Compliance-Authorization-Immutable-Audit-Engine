@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
 export const LATEST_SCHEMA_VERSION =
-  "0013_ruleset_traceability";
+  "0014_worker_activity";
 
 export async function runMigrations(pool: Pool): Promise<void> {
   await pool.query(`
@@ -199,6 +199,18 @@ export async function runMigrations(pool: Pool): Promise<void> {
         "INSERT INTO schema_migrations(version) VALUES ($1)",
         ["0013_ruleset_traceability"],
       );
+      await pool.query("COMMIT");
+    } catch (error) {
+      await pool.query("ROLLBACK");
+      throw error;
+    }
+  }
+
+  if (!versions.has("0014_worker_activity")) {
+    await pool.query("BEGIN");
+    try {
+      await pool.query(WORKER_ACTIVITY_SQL);
+      await pool.query("INSERT INTO schema_migrations(version) VALUES ($1)", ["0014_worker_activity"]);
       await pool.query("COMMIT");
     } catch (error) {
       await pool.query("ROLLBACK");
@@ -1459,4 +1471,14 @@ CREATE TRIGGER rule_sets_immutable_content
 BEFORE UPDATE ON rule_sets
 FOR EACH ROW
 EXECUTE FUNCTION protect_rule_set_immutable_content();
+`;
+
+const WORKER_ACTIVITY_SQL = `
+CREATE TABLE IF NOT EXISTS worker_activity (
+  worker_name text PRIMARY KEY,
+  instance_id uuid NOT NULL,
+  release_sha text,
+  last_seen_at timestamptz NOT NULL,
+  sweeps jsonb NOT NULL DEFAULT '{}'::jsonb
+);
 `;
