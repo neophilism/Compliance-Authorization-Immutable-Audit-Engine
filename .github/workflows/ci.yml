@@ -34,5 +34,6 @@ jobs:
       - run: npm run db:seed
       - run: npm run typecheck
       - run: npm test
+      - run: node --test scripts/verify-deployment.test.mjs
       - run: npm run rules:evaluate -- examples/rules/baseline-system-security.yaml examples/rules/baseline-system-security.context.json
       - run: npm run build
