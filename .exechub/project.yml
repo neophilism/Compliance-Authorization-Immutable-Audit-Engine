@@ -1,0 +1,20 @@
+project:
+  name: Compliance-Authorization-Immutable-Audit-Engine
+  display_name: Compliance Authorization and Immutable Audit Engine
+  repository: neophilism/Compliance-Authorization-Immutable-Audit-Engine
+  status: active-development
+
+roadmap:
+  version: 1
+  planned_prs: 12
+  approved: true
+
+milestones:
+  - name: Integration and deployment acceptance
+    prs: 2
+  - name: Integrity, security and SDK hardening
+    prs: 5
+  - name: Monitoring, recovery and downstream applications
+    prs: 3
+  - name: Performance and release assurance
+    prs: 2
