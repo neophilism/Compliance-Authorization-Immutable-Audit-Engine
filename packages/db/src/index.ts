@@ -19,3 +19,15 @@ export type {
   AppendAuditEventInput,
   AuditVerificationResult,
 } from "./audit.js";
+export {
+  collectAuditCheckpoint,
+  signAuditCheckpoint,
+  verifyAuditCheckpointSignature,
+  verifyAuditCheckpointAgainstDatabase,
+} from "./audit-anchor.js";
+export type {
+  AuditCheckpoint,
+  AuditChainHead,
+  SignedAuditCheckpoint,
+  CheckpointVerification,
+} from "./audit-anchor.js";
