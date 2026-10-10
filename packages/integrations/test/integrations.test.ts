@@ -368,6 +368,8 @@ test("audit outbox fans out subscribed events and webhook delivery is HMAC signe
     url: string;
     headers: Record<string, string>;
     body: string;
+    redirect?: RequestRedirect;
+    signal?: AbortSignal | null;
   }> = [];
 
   const fakeFetch = (async (
@@ -384,6 +386,8 @@ test("audit outbox fans out subscribed events and webhook delivery is HMAC signe
         ),
       body:
         String(init?.body ?? ""),
+      redirect: init?.redirect,
+      signal: init?.signal,
     });
 
     return new Response(null, {
@@ -495,6 +499,8 @@ test("audit outbox fans out subscribed events and webhook delivery is HMAC signe
       requests.length,
       1,
     );
+    assert.equal(requests[0]?.redirect, "error");
+    assert.ok(requests[0]?.signal, "webhook delivery requires a timeout signal");
 
     const request =
       requests[0]!;

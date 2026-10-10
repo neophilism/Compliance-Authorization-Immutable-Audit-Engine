@@ -1,5 +1,6 @@
 export {
   IntegrationService,
+  validateWebhookUrl,
 } from "./service.js";
 export {
   buildOpenApiDocument,
