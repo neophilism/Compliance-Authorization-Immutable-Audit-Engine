@@ -4,6 +4,7 @@ import {
   randomBytes,
   randomUUID,
 } from "node:crypto";
+import { isIP } from "node:net";
 import type {
   Pool,
   PoolClient,
@@ -1433,9 +1434,11 @@ export class IntegrationService
       try {
         const response =
           await this.fetchImpl(
-            row.url,
+            validateWebhookUrl(row.url),
             {
               method: "POST",
+              redirect: "error",
+              signal: AbortSignal.timeout(10_000),
               headers: {
                 "content-type":
                   "application/json",
@@ -2268,7 +2271,7 @@ function normalizeEventTypes(
   ];
 }
 
-function validateWebhookUrl(
+export function validateWebhookUrl(
   value: string,
 ): string {
   const input =
@@ -2296,13 +2299,19 @@ function validateWebhookUrl(
     );
   }
 
-  if (
-    url.username ||
-    url.password
-  ) {
+  if (url.username || url.password) {
+    throw new IntegrationError("validation", "webhook URL cannot contain credentials");
+  }
+  if (url.hash || url.port) {
+    throw new IntegrationError("validation", "webhook URL cannot use fragments or nonstandard ports");
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host.includes(".") || host === "localhost" ||
+      host.endsWith(".localhost") || host.endsWith(".local") ||
+      host.endsWith(".internal") || isIP(host) !== 0) {
     throw new IntegrationError(
       "validation",
-      "webhook URL cannot contain credentials",
+      "webhook URL requires an external DNS hostname",
     );
   }
 
