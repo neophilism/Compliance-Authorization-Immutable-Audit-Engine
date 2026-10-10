@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "1",
+  "assessmentKind": "component-scope-inventory-only",
+  "securityStandard": {
+    "repository": "neophilism/End-To-End-Everywhere-Security-Architecture-Standard",
+    "reviewedSourceCommit": "cef6052bdb3bcf45ca0bd3e29d18a519d8f041e0",
+    "frozenVersion": false,
+    "note": "The referenced development tree is not a production certification basis."
+  },
+  "claims": {
+    "endToEndEncryption": "not-claimed",
+    "formalVerification": "not-claimed",
+    "externalAuditAnchoring": "conditional-on-independent-storage-and-trustworthy-key-management",
+    "productionReadiness": "not-assessed"
+  },
+  "components": [
+    {
+      "id": "operator-api",
+      "path": "apps/api",
+      "role": "trusted-service-processing",
+      "assets": [
+        "operator credentials",
+        "compliance records",
+        "authorization state"
+      ],
+      "threats": [
+        "TM-NET-ACTIVE",
+        "TM-SERVICE-READ",
+        "TM-ACCOUNT",
+        "TM-CREDENTIAL"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "TLS 1.3 handshake evidence",
+        "credential/session review",
+        "independent penetration test"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "scheduler-worker",
+      "path": "apps/worker",
+      "role": "trusted-server-side-processor",
+      "assets": [
+        "scheduled decisions",
+        "webhook authentication secrets"
+      ],
+      "threats": [
+        "TM-SERVICE-ACTIVE",
+        "TM-CREDENTIAL"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "single-writer/failover assurance",
+        "secret-handling review",
+        "worker job-replay tests"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "postgres-store",
+      "path": "packages/db",
+      "role": "trusted-database-with-audit-chain",
+      "assets": [
+        "plaintext compliance state",
+        "audit events",
+        "evidence metadata"
+      ],
+      "threats": [
+        "TM-SERVICE-READ",
+        "TM-SERVICE-ACTIVE"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "backup confidentiality evidence",
+        "independent key custody",
+        "signed checkpoint external retention",
+        "restore exercise"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "browser-admin",
+      "path": "apps/web",
+      "role": "operator-user-interface",
+      "assets": [
+        "operator credential",
+        "administrative views"
+      ],
+      "threats": [
+        "TM-ACCOUNT",
+        "TM-CREDENTIAL",
+        "TM-NET-ACTIVE"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "authenticated browser acceptance",
+        "CSP and XSS review",
+        "session/identity assurance"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "typed-sdk",
+      "path": "packages/sdk",
+      "role": "client-transport-to-trusted-engine",
+      "assets": [
+        "operator/service bearer tokens",
+        "resource state"
+      ],
+      "threats": [
+        "TM-NET-ACTIVE",
+        "TM-CREDENTIAL"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "transport TLS verification",
+        "credential misuse/rotation review",
+        "two-app integration acceptance"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "webhook-integrations",
+      "path": "packages/integrations",
+      "role": "signed-server-webhook-outbound",
+      "assets": [
+        "webhook signing keys",
+        "event metadata"
+      ],
+      "threats": [
+        "TM-NET-ACTIVE",
+        "TM-SERVICE-ACTIVE"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "outbound egress proxy/IP validation",
+        "DNS-rebinding defense",
+        "replay-acceptance recipient guidance"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "public-projections",
+      "path": "packages/publication",
+      "role": "explicit-publication-boundary",
+      "assets": [
+        "public compliance projections",
+        "private source records"
+      ],
+      "threats": [
+        "TM-SERVICE-ACTIVE",
+        "TM-CREDENTIAL"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "adversarial disclosure review",
+        "publication policy review",
+        "privacy threat assessment"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "audit-checkpoints",
+      "path": "packages/db/src/audit-anchor.ts",
+      "role": "signed-historical-integrity-check",
+      "assets": [
+        "audit history",
+        "external verifying key"
+      ],
+      "threats": [
+        "TM-SERVICE-ACTIVE",
+        "TM-CREDENTIAL"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "independent immutable storage",
+        "off-host signing key custody",
+        "signed checkpoint frequency/rotation policy"
+      ],
+      "assessment": "unverified"
+    },
+    {
+      "id": "engine-room-telemetry",
+      "path": "scripts/engine-room-monitor.mjs",
+      "role": "limited-operational-metric-export",
+      "assets": [
+        "service readiness",
+        "telemetry authentication key"
+      ],
+      "threats": [
+        "TM-NET-ACTIVE",
+        "TM-SERVICE-ACTIVE"
+      ],
+      "e2ee": "not-claimed",
+      "gaps": [
+        "privacy/leakage assessment",
+        "telemetry credential rotation",
+        "ingestion/alert verification"
+      ],
+      "assessment": "unverified"
+    }
+  ],
+  "releaseEvidenceGates": [
+    "independent reviewer approval",
+    "source-bound secret scan, dependency audit, static analysis and fuzz coverage",
+    "SBOM and independently verified build provenance",
+    "real production TLS negotiation test",
+    "browser authentication and accessibility acceptance",
+    "tested backup and isolated restore",
+    "independently retained audit checkpoints",
+    "live Engine Room metric delivery and alert test"
+  ]
+}
