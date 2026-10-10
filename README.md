@@ -1,5 +1,7 @@
 # Compliance, Authorization & Immutable Audit Engine
 
+**Full development plan and handoff:** [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md).
+
 Reusable civic infrastructure for compliance rules, authorization decisions, tamper-evident audit history, evidence, deadlines, findings, remediation, certification, and reporting.
 
 ## Core lifecycle
