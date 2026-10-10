@@ -2307,7 +2307,7 @@ export function validateWebhookUrl(
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (!host.includes(".") || host === "localhost" ||
-      host.endsWith(".localhost") || host.endsWith(".local") ||
+      host.endsWith(".localhost") || host.endsWith(".localdomain") || host.endsWith(".local") ||
       host.endsWith(".internal") || isIP(host) !== 0) {
     throw new IntegrationError(
       "validation",
