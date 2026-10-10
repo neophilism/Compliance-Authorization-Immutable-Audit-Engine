@@ -90,7 +90,7 @@ async function main() {
   if (!databaseUrl || !/^postgres(ql)?:\/\//.test(databaseUrl)) {
     throw new Error("DATABASE_URL_UNPOOLED direct PostgreSQL connection is required");
   }
-  const pool = createPool({ connectionString: databaseUrl });
+  const pool = createPool(databaseUrl);
   try {
     const result = await provisionFirstTenant(pool, {
       slug: process.env.CAIAE_BOOTSTRAP_ORG_SLUG,
