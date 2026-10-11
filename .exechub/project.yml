@@ -1,3 +1,4 @@
+# CANONICAL PR ROADMAP: registry/roadmap.json. Preserve this historical manifest; update canonical registry for planned PR count and mappings.
 project:
   name: Compliance-Authorization-Immutable-Audit-Engine
   display_name: Compliance Authorization and Immutable Audit Engine
