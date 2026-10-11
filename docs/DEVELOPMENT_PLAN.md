@@ -1,3 +1,5 @@
+> **Canonical PR tracking:** [`registry/roadmap.json`](../registry/roadmap.json). Historical detailed plan continues below; add/change PRs only in the canonical file.
+
 # Compliance, Authorization & Immutable Audit Engine — recovered original development plan and independent-account handoff
 
 **Historical source:** Original October 5 reusable 21-work-package plan. Numbered 21-milestone original roadmap recovered from the previous conversations and cross-checked with checked-in roadmap and technical documentation. This document preserves original scope and, where applicable, separates later extensions. Technical per-item acceptance language is an engineering elaboration rather than a purported verbatim transcript; a milestone ID is **not** a GitHub PR number.
