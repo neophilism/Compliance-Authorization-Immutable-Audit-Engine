@@ -22,43 +22,65 @@
       "id": "CAIAE-003",
       "title": "Integrity, security and SDK hardening — approved work package 1 of 5",
       "origin": "original",
-      "prs": []
+      "prs": [
+        38
+      ],
+      "mappingEvidence": "Signed audit checkpoint implementation and independent verification tests; software integrity slice, not proof of external anchoring."
     },
     {
       "id": "CAIAE-004",
       "title": "Integrity, security and SDK hardening — approved work package 2 of 5",
       "origin": "original",
-      "prs": []
+      "prs": [
+        40
+      ],
+      "mappingEvidence": "Outbound webhook destination and request hardening tests; production network egress risks remain."
     },
     {
       "id": "CAIAE-005",
       "title": "Integrity, security and SDK hardening — approved work package 3 of 5",
       "origin": "original",
-      "prs": []
+      "prs": [
+        42
+      ],
+      "mappingEvidence": "Independent thin-application SDK contract tests; software SDK hardening slice."
     },
     {
       "id": "CAIAE-006",
       "title": "Integrity, security and SDK hardening — approved work package 4 of 5",
       "origin": "original",
-      "prs": []
+      "prs": [
+        44
+      ],
+      "mappingEvidence": "Component-level security applicability evidence gates; not external security certification."
     },
     {
       "id": "CAIAE-007",
       "title": "Integrity, security and SDK hardening — approved work package 5 of 5",
       "origin": "original",
-      "prs": []
+      "prs": [
+        31,
+        32
+      ],
+      "mappingEvidence": "Typed evidence/reporting/health and publication lifecycle SDK implementations with tests."
     },
     {
       "id": "CAIAE-008",
       "title": "Monitoring, recovery and downstream applications — approved work package 1 of 3",
       "origin": "original",
-      "prs": []
+      "prs": [
+        39
+      ],
+      "mappingEvidence": "Worker heartbeat, sweep health, and readiness monitoring implementation; live endpoint setup still external."
     },
     {
       "id": "CAIAE-009",
       "title": "Monitoring, recovery and downstream applications — approved work package 2 of 3",
       "origin": "original",
-      "prs": []
+      "prs": [
+        41
+      ],
+      "mappingEvidence": "Isolated disaster-recovery verification implementation and tests; live restore remains unverified."
     },
     {
       "id": "CAIAE-010",
