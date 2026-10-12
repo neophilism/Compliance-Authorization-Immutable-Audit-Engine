@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "repository": "neophilism/Compliance-Authorization-Immutable-Audit-Engine",
+  "classificationStatus": "unverified",
+  "coverageComplete": false,
+  "components": [],
+  "dataFlows": [],
+  "sourceObservations": [
+    {
+      "path": "README.md",
+      "blobSha": "afc52424a2057309bfacd207fd126412610ca185"
+    }
+  ],
+  "limitations": [
+    "This is a discovery placeholder, not a complete E2EESA component inventory or a claim that no protected flows exist.",
+    "Use the pinned upstream 0.2 component-inventory and scoped-assessment contracts for actual assessment."
+  ]
+}
