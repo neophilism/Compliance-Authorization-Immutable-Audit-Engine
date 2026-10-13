@@ -1,0 +1,49 @@
+version: 2.1
+
+# Full application, Postgres migration/seed, rules and recovery-contract CI.
+# Do not confuse source tests with deploy/monitor authorization.
+jobs:
+  full-ci:
+    docker:
+      - image: cimg/node:24.21.0
+      - image: postgres:16-alpine
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: caiae
+    resource_class: large
+    environment:
+      CI: "true"
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/caiae
+    steps:
+      - checkout
+      - run:
+          name: Install workspace dependencies
+          command: npm install
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run typecheck
+      - run: npm test
+      - run: node --test scripts/verify-deployment.test.mjs
+      - run: node --test scripts/engine-room-monitor.test.mjs
+      - run: node --test scripts/verify-recovery.test.mjs
+      - run: node --test scripts/bootstrap-tenant.test.mjs
+      - run:
+          name: Evaluate baseline system security policy
+          command: npm run rules:evaluate -- examples/rules/baseline-system-security.yaml examples/rules/baseline-system-security.context.json
+      - run: npm run build
+  security-status-record:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: E2EESA status integrity only (not security certification)
+          command: python3 scripts/validate_e2eesa_status.py
+
+workflows:
+  required-verification:
+    jobs:
+      - full-ci
+      - security-status-record
