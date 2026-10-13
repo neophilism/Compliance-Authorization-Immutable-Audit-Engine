@@ -1,22 +1,33 @@
 {
-  "schemaVersion": 1,
   "repository": "neophilism/Compliance-Authorization-Immutable-Audit-Engine",
-  "roadmapVersion": 1,
+  "title": "Compliance-Authorization-Immutable-Audit-Engine",
   "planVerified": true,
   "plannedPrCount": 12,
+  "sourceFiles": [
+    ".exechub/project.yml",
+    "docs/DEVELOPMENT_PLAN.md"
+  ],
+  "schemaVersion": 1,
+  "roadmapVersion": 1,
   "observedAt": "2026-10-11T17:39:32.810Z",
   "units": [
     {
       "id": "CAIAE-001",
       "title": "Integration and deployment acceptance — approved work package 1 of 2",
       "origin": "original",
-      "prs": []
+      "prs": [],
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-002",
       "title": "Integration and deployment acceptance — approved work package 2 of 2",
       "origin": "original",
-      "prs": []
+      "prs": [],
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-003",
@@ -25,7 +36,10 @@
       "prs": [
         38
       ],
-      "mappingEvidence": "Signed audit checkpoint implementation and independent verification tests; software integrity slice, not proof of external anchoring."
+      "mappingEvidence": "Signed audit checkpoint implementation and independent verification tests; software integrity slice, not proof of external anchoring.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-004",
@@ -34,7 +48,10 @@
       "prs": [
         40
       ],
-      "mappingEvidence": "Outbound webhook destination and request hardening tests; production network egress risks remain."
+      "mappingEvidence": "Outbound webhook destination and request hardening tests; production network egress risks remain.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-005",
@@ -43,7 +60,10 @@
       "prs": [
         42
       ],
-      "mappingEvidence": "Independent thin-application SDK contract tests; software SDK hardening slice."
+      "mappingEvidence": "Independent thin-application SDK contract tests; software SDK hardening slice.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-006",
@@ -52,7 +72,10 @@
       "prs": [
         44
       ],
-      "mappingEvidence": "Component-level security applicability evidence gates; not external security certification."
+      "mappingEvidence": "Component-level security applicability evidence gates; not external security certification.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-007",
@@ -62,7 +85,10 @@
         31,
         32
       ],
-      "mappingEvidence": "Typed evidence/reporting/health and publication lifecycle SDK implementations with tests."
+      "mappingEvidence": "Typed evidence/reporting/health and publication lifecycle SDK implementations with tests.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-008",
@@ -71,7 +97,10 @@
       "prs": [
         39
       ],
-      "mappingEvidence": "Worker heartbeat, sweep health, and readiness monitoring implementation; live endpoint setup still external."
+      "mappingEvidence": "Worker heartbeat, sweep health, and readiness monitoring implementation; live endpoint setup still external.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-009",
@@ -80,25 +109,37 @@
       "prs": [
         41
       ],
-      "mappingEvidence": "Isolated disaster-recovery verification implementation and tests; live restore remains unverified."
+      "mappingEvidence": "Isolated disaster-recovery verification implementation and tests; live restore remains unverified.",
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-010",
       "title": "Monitoring, recovery and downstream applications — approved work package 3 of 3",
       "origin": "original",
-      "prs": []
+      "prs": [],
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-011",
       "title": "Performance and release assurance — approved work package 1 of 2",
       "origin": "original",
-      "prs": []
+      "prs": [],
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     },
     {
       "id": "CAIAE-012",
       "title": "Performance and release assurance — approved work package 2 of 2",
       "origin": "original",
-      "prs": []
+      "prs": [],
+      "dependsOn": [],
+      "externalDependencies": [],
+      "externalPrerequisites": []
     }
   ],
   "pullRequests": [
