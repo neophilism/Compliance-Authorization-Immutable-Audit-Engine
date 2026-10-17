@@ -16,7 +16,9 @@ Checks: HTTPS (except local), API liveness, database/schema readiness, matching 
 
 Authenticated acceptance now requires the expected full 40-character commit SHA
 before any network request. Both health endpoints must identify the API service,
-the same full commit and a valid schema version. A null release is not evidence of
+the same full commit and a named schema revision (for example,
+`0014_worker_activity`, as emitted from the server's migration contract), not an
+invented numeric version. A null release is not evidence of
 the intended deployment. An optional `CAIAE_SMOKE_EXPECTED_ORGANIZATION_ID`
 pins the intended tenant; supplying it requires an operator token.
 

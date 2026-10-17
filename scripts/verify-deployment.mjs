@@ -155,7 +155,8 @@ export async function verifyDeployment({
   }
   const ready = await expectJson("/ready", 200);
   if (ready.status !== "ready" || ready.service !== "api" ||
-      !Number.isSafeInteger(ready.schemaVersion) || ready.schemaVersion < 1) {
+      typeof ready.schemaVersion !== "string" || ready.schemaVersion.length > 128 ||
+      !/^\d{4}_[a-z][a-z0-9_]*$/.test(ready.schemaVersion)) {
     throw new Error("/ready: database/schema not ready");
   }
   if (health.release !== ready.release) throw new Error("Health/readiness release mismatch");

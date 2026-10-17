@@ -8,7 +8,7 @@ const OPTIONS = { baseUrl: "https://engine.example", expectedRelease: RELEASE };
 
 function mockBody(path, token, release) {
   if (path === "/health") return { status: "ok", service: "api", release };
-  if (path === "/ready") return { status: "ready", service: "api", schemaVersion: 20, release };
+  if (path === "/ready") return { status: "ready", service: "api", schemaVersion: "0014_worker_activity", release };
   if (path === "/openapi.json") return {
     openapi: "3.1.0", paths: Object.fromEntries([
       "/health", "/ready", "/v1/security/me", "/v1/public/certifications/verify/{code}",
