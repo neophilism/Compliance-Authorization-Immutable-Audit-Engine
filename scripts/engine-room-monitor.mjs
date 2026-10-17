@@ -33,14 +33,20 @@ function commitSha(raw) {
 }
 
 export function monitorExpectedRelease(env = process.env) {
-  if (env.CAIAE_MONITOR_EXPECTED_RELEASE !== undefined) {
-    return commitSha(env.CAIAE_MONITOR_EXPECTED_RELEASE);
-  }
   // The existing manual acceptance step already inherits these GitHub values.
   // Ordinary monitoring need not assume that every main commit is deployed.
-  if (env.GITHUB_WORKFLOW === "Production Acceptance (manual)") {
-    return commitSha(env.GITHUB_SHA);
+  const acceptance = env.GITHUB_WORKFLOW === "Production Acceptance (manual)" ||
+    (typeof env.GITHUB_WORKFLOW_REF === "string" &&
+      /\/\.github\/workflows\/production-acceptance\.yml@/.test(env.GITHUB_WORKFLOW_REF));
+  if (acceptance) {
+    const workflowRelease = commitSha(env.GITHUB_SHA);
+    if (env.CAIAE_MONITOR_EXPECTED_RELEASE !== undefined &&
+        commitSha(env.CAIAE_MONITOR_EXPECTED_RELEASE) !== workflowRelease) {
+      throw new Error("Monitoring release pin conflicts with the acceptance workflow commit");
+    }
+    return workflowRelease;
   }
+  if (env.CAIAE_MONITOR_EXPECTED_RELEASE !== undefined) return commitSha(env.CAIAE_MONITOR_EXPECTED_RELEASE);
   return undefined;
 }
 

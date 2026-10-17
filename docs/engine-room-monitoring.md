@@ -33,13 +33,15 @@ samples must agree on release and schema; a rolling mixed-release result is
 degraded rather than 100-percent healthy.
 
 Optional `CAIAE_MONITOR_EXPECTED_RELEASE` pins an intended full commit. The
-existing **Production Acceptance (manual)** workflow automatically uses its
-inherited `GITHUB_SHA` when no explicit pin is supplied. This closes the gap
+existing **Production Acceptance (manual)** workflow always uses its inherited
+`GITHUB_SHA`; a conflicting explicit pin fails before any network request. The
+standard workflow-file reference also identifies this acceptance job if its
+display name changes. This closes the gap
 between its earlier smoke test and the later worker probes without editing or
 activating either workflow. Ordinary recurring monitoring does not assume the
-latest main commit is deployed; it still rejects mixed-release samples. If the
-manual workflow is renamed, supply the explicit expected-release setting and
-update the workflow-name contract before calling it acceptance.
+latest main commit is deployed; it still rejects mixed-release samples. If both
+the manual workflow file and display name change, update this acceptance-job
+identity contract before calling it acceptance.
 
 Readiness probes have a 10-second header-and-body deadline and a 64-KiB actual
 JSON byte limit, including decompressed bytes. Invalid lengths, media types,

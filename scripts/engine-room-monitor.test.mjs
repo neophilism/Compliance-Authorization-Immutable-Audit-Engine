@@ -60,6 +60,11 @@ test("manual acceptance automatically pins the workflow commit, ordinary monitor
   assert.equal(monitorExpectedRelease({ GITHUB_WORKFLOW: "Production Acceptance (manual)", GITHUB_SHA: RELEASE }), RELEASE);
   assert.equal(monitorExpectedRelease({ GITHUB_WORKFLOW: "Engine Room Production Monitor", GITHUB_SHA: RELEASE }), undefined);
   assert.equal(monitorExpectedRelease({ CAIAE_MONITOR_EXPECTED_RELEASE: RELEASE }), RELEASE);
+  assert.equal(monitorExpectedRelease({ GITHUB_WORKFLOW: "Renamed acceptance",
+    GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/production-acceptance.yml@refs/heads/main",
+    GITHUB_SHA: RELEASE }), RELEASE);
+  assert.throws(() => monitorExpectedRelease({ GITHUB_WORKFLOW: "Production Acceptance (manual)",
+    GITHUB_SHA: RELEASE, CAIAE_MONITOR_EXPECTED_RELEASE: "b".repeat(40) }), /conflicts/);
   for (const env of [{ GITHUB_WORKFLOW: "Production Acceptance (manual)" },
     { CAIAE_MONITOR_EXPECTED_RELEASE: "abc123" }, { CAIAE_MONITOR_EXPECTED_RELEASE: "" }]) {
     assert.throws(() => monitorExpectedRelease(env));
@@ -196,7 +201,9 @@ test("invalid measurements and fabricated latency are rejected before signing", 
 test("monitor validates endpoints, credentials and acceptance SHA before probing", async () => {
   for (const patch of [{ ENGINE_ROOM_TELEMETRY_SECRET: "short" },
     { ENGINE_ROOM_BASE_URL: "http://room.example" }, { ENGINE_ROOM_TELEMETRY_KEY_ID: "bad\nkey" },
-    { GITHUB_WORKFLOW: "Production Acceptance (manual)" }]) {
+    { GITHUB_WORKFLOW: "Production Acceptance (manual)" },
+    { GITHUB_WORKFLOW: "Production Acceptance (manual)", GITHUB_SHA: RELEASE,
+      CAIAE_MONITOR_EXPECTED_RELEASE: "b".repeat(40) }]) {
     let called = false;
     await assert.rejects(runMonitor({ env: { ...ENV, ...patch }, fetchImpl: async () => { called = true; } }));
     assert.equal(called, false);
