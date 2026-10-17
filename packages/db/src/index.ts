@@ -21,9 +21,11 @@ export type {
 } from "./audit.js";
 export {
   collectAuditCheckpoint,
+  collectAuditCheckpointWithClient,
   signAuditCheckpoint,
   verifyAuditCheckpointSignature,
   verifyAuditCheckpointAgainstDatabase,
+  verifyAuditCheckpointAgainstDatabaseWithClient,
 } from "./audit-anchor.js";
 export type {
   AuditCheckpoint,
@@ -35,3 +37,4 @@ export {
   WORKER_SWEEP_NAMES, startWorkerActivity, recordWorkerSweep, assessWorkerHealth,
 } from "./worker-health.js";
 export type { WorkerSweepName, WorkerHealthVerdict } from "./worker-health.js";
+
