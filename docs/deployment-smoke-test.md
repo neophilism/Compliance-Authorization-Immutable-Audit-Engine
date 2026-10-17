@@ -52,5 +52,12 @@ destination, plus fixtures for the real identity shape, tenant mismatches,
 inactive credentials, malformed responses, byte limits and stalled streams.
 Fixture success is not a live production acceptance result.
 
+The existing API security integration test also invokes this checker against
+the real Fastify handlers, generated OpenAPI and PostgreSQL-backed authentication
+in CI's isolated test database. It must accept the actual operator response and
+reject a different expected tenant. This prevents the mocked identity shape
+from silently drifting away from the server contract again. That test requires
+`DATABASE_URL`; a local scaffold-only run does not establish database integration.
+
 This check alone does not prove the worker is sweeping, the web browser interface is usable, webhook deliveries succeed, audit chains are externally anchored, or database backups are restorable. Verify each separately before labeling production operational.
 
