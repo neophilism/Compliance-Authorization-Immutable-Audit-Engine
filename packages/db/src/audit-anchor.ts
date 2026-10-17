@@ -6,7 +6,7 @@ import {
 } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { AuditEvent } from "@caiae/core";
-import { canonicalJson, verifyAuditChain } from "./audit.js";
+import { canonicalJson, hashAuditEvent } from "./audit.js";
 
 export type AuditChainHead = {
   organizationId: string;
@@ -54,17 +54,34 @@ function mapEvent(row: Record<string, any>): AuditEvent {
   };
 }
 
+// Bound fetched rows per chain page, not payload bytes or the number of chains.
+const AUDIT_PREFIX_PAGE_SIZE = 256;
+
 async function verifyPrefix(client: Pick<PoolClient, "query">, head: AuditChainHead): Promise<boolean> {
-  const result = await client.query(
-    "SELECT * FROM audit_events " +
-    "WHERE organization_id = $1 AND aggregate_type = $2 AND aggregate_id = $3 " +
-    "AND sequence_number <= $4 ORDER BY sequence_number ASC",
-    [head.organizationId, head.aggregateType, head.aggregateId, head.sequenceNumber],
-  );
-  const events = result.rows.map(mapEvent);
-  if (events.length !== head.sequenceNumber) return false;
-  const verification = verifyAuditChain(events);
-  return verification.valid && events.at(-1)?.eventHash === head.eventHash;
+  if (!Number.isSafeInteger(head.sequenceNumber) || head.sequenceNumber < 1) return false;
+  let checked = 0;
+  let previousHash: string | null = null;
+  while (checked < head.sequenceNumber) {
+    const result = await client.query(
+      "SELECT * FROM audit_events " +
+      "WHERE organization_id = $1 AND aggregate_type = $2 AND aggregate_id = $3 " +
+      "AND sequence_number > $4 AND sequence_number <= $5 " +
+      "ORDER BY sequence_number ASC LIMIT $6",
+      [head.organizationId, head.aggregateType, head.aggregateId, checked,
+        head.sequenceNumber, AUDIT_PREFIX_PAGE_SIZE],
+    );
+    if (result.rows.length === 0 || result.rows.length > AUDIT_PREFIX_PAGE_SIZE) return false;
+    for (const row of result.rows) {
+      const event = mapEvent(row);
+      if (event.sequenceNumber !== checked + 1 || event.sequenceNumber > head.sequenceNumber ||
+          event.previousEventHash !== previousHash) return false;
+      const { eventHash, ...withoutHash } = event;
+      if (hashAuditEvent(withoutHash) !== eventHash) return false;
+      checked++;
+      previousHash = eventHash;
+    }
+  }
+  return previousHash === head.eventHash;
 }
 
 function parseHead(row: Record<string, any>): AuditChainHead {
@@ -209,4 +226,5 @@ export async function verifyAuditCheckpointAgainstDatabaseWithClient(
   }
   return { valid: true, checkedChains };
 }
+
 
