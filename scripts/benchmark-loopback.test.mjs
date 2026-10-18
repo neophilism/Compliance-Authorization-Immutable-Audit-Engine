@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createServer } from "node:http";
 import assert from "node:assert/strict";
 import { benchmarkLoopbackHttp } from "./benchmark-loopback.mjs";
 test("loopback-only bounded status sampling returns actual failure count",async()=>{
@@ -41,4 +42,27 @@ test("bounded concurrency never exceeds configured active requests",async()=>{
  await assert.rejects(()=>benchmarkLoopbackHttp("http://localhost:3000",{
   iterations:2,concurrency:3
  }),/Concurrency/);
+});
+test("real loopback transport counts redirect and server errors without following",async()=>{
+ let calls=0;
+ const server=createServer((_request,response)=>{
+  calls++;
+  if(calls===1) {response.writeHead(302,{location:"https://example.invalid/"});response.end();return;}
+  response.writeHead(calls===3?503:200,{"content-type":"application/json"});
+  response.end("{}");
+ });
+ await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+ try {
+  const address=server.address();
+  assert.ok(address && typeof address!=="string");
+  const result=await benchmarkLoopbackHttp(
+   `http://127.0.0.1:${address.port}/ready`,{iterations:3}
+  );
+  assert.equal(calls,3);
+  assert.equal(result.successes,1);
+  assert.equal(result.failures,2);
+ } finally {
+  server.closeAllConnections();
+  await new Promise(resolve=>server.close(resolve));
+ }
 });
