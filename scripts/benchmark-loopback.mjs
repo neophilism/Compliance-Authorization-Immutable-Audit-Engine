@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { pathToFileURL } from "node:url";
 /** Bounded, credential-free loopback probe; never a production SLO claim. */
 export async function benchmarkLoopbackHttp(urlText, options = {}) {
   const url = new URL(urlText);
@@ -51,5 +52,17 @@ export async function benchmarkLoopbackHttp(urlText, options = {}) {
     kind: "isolated-loopback-http", requests: iterations, concurrency,
     successes, failures, p50Ms: percentile(.5), p95Ms: percentile(.95),
     p99Ms: percentile(.99), productionSloVerified: false,
+  });
+}
+
+// Explicit opt-in, loopback-only CLI; argument values never become request headers.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [url, iterations, concurrency] = process.argv.slice(2);
+  benchmarkLoopbackHttp(url, {
+    iterations: iterations === undefined ? undefined : Number(iterations),
+    concurrency: concurrency === undefined ? undefined : Number(concurrency),
+  }).then(report => console.log(JSON.stringify(report))).catch(error => {
+    console.error(error instanceof Error ? error.message : "Benchmark failed");
+    process.exitCode = 1;
   });
 }
