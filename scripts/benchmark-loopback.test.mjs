@@ -15,3 +15,15 @@ test("external and credential-bearing targets fail closed",async()=>{
  }
  await assert.rejects(()=>benchmarkLoopbackHttp("http://localhost:3000",{iterations:101}),/1-100/);
 });
+test("redirect status never counts as a successful sample",async()=>{
+ const result=await benchmarkLoopbackHttp("http://localhost:3000/health",{
+  iterations:1,fetchImpl:async()=>({status:302,body:{cancel:async()=>{}}})
+ });
+ assert.equal(result.successes,0);assert.equal(result.failures,1);
+});
+test("abort during final request cannot return a misleading successful report",async()=>{
+ const controller=new AbortController();
+ await assert.rejects(()=>benchmarkLoopbackHttp("http://127.0.0.1:3000/health",{
+  iterations:1,signal:controller.signal,fetchImpl:async()=>{controller.abort();throw new Error("aborted");}
+ }),/Benchmark aborted/);
+});

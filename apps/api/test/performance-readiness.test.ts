@@ -44,6 +44,24 @@ test("isolated HTTP readiness benchmark traverses the real API and PostgreSQL", 
       release: "isolated-benchmark",
       ...result,
     }));
+
+    const publicUrl = new URL("/v1/public/certifications/verify/not-a-real-code", origin);
+    const publicResponse = await fetch(publicUrl, {
+      redirect: "error", signal: AbortSignal.timeout(5000),
+    });
+    assert.equal(publicResponse.status, 200);
+    await publicResponse.body?.cancel();
+    const publicResult = await benchmarkLoopbackHttp(publicUrl.href, { iterations: 20 });
+    assert.equal(publicResult.requests, 20);
+    assert.equal(publicResult.successes, 20);
+    assert.equal(publicResult.failures, 0);
+    assert.equal(publicResult.productionSloVerified, false);
+    t.diagnostic(JSON.stringify({
+      environment: "isolated-ci-api-postgresql",
+      path: publicUrl.pathname,
+      release: "isolated-benchmark",
+      ...publicResult,
+    }));
   } finally {
     await app.close();
   }

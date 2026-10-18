@@ -18,14 +18,16 @@ export async function benchmarkLoopbackHttp(urlText, options = {}) {
     const begin=performance.now();
     try {
       const response=await fetchImpl(url, {
-        method:"GET", redirect:"error", signal:AbortSignal.timeout(2000)
+        method:"GET", redirect:"error", signal:options.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(2000)]) : AbortSignal.timeout(2000)
       });
       await response.body?.cancel?.();
-      if (response.status>=200 && response.status<400) successes++;
+      if (response.status>=200 && response.status<300) successes++;
       else failures++;
     } catch {
+      if (options.signal?.aborted) throw new Error("Benchmark aborted");
       failures++;
     }
+    if (options.signal?.aborted) throw new Error("Benchmark aborted");
     samples.push(performance.now()-begin);
   }
   samples.sort((a,b)=>a-b);

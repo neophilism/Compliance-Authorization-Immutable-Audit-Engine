@@ -1,6 +1,6 @@
 # CAIAE-012 performance and release assurance
 
-The mapped draft PR adds bounded synthetic operation sampling and loopback HTTP sampling. The API test now starts the real Fastify service on an ephemeral loopback port, sends 20 HTTP GET requests to `/ready`, and records p50/p95/p99 latency, success and failure counts. Under CI, `/ready` checks a real isolated PostgreSQL database and migration state. The first response must identify the expected test release. A failed response or unavailable database fails the test.
+The mapped draft PR adds bounded synthetic operation sampling and loopback HTTP sampling. The API test now starts the real Fastify service on an ephemeral loopback port, sends 20 HTTP GET requests to `/ready`, and records p50/p95/p99 latency, success and failure counts. Under CI, `/ready` checks a real isolated PostgreSQL database and migration state. The first readiness response must identify the expected test release. The public lookup exercises an additional database-backed read path. A failed response or unavailable database fails the test. Redirects and caller cancellation never count as successful samples.
 
 The diagnostic is a small, sequential, single-process test-environment sample. It is useful for detecting a broken API/database path and for obtaining a reproducible measurement method. It is not production throughput, a concurrency limit, a latency SLO, a representative workload, or evidence of disaster recovery. CI timing is variable and no latency threshold is asserted.
 
