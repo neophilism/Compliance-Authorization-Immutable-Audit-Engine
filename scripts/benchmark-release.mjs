@@ -136,9 +136,14 @@ export async function sampleReleasePublicLookup({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const sampler = process.env.CAIAE_BENCH_WORKLOAD === "public-db"
+  const workload = process.env.CAIAE_BENCH_WORKLOAD ?? "ready";
+  if (!["ready", "public-db"].includes(workload)) {
+    console.error("CAIAE_BENCH_WORKLOAD must be ready or public-db");
+    process.exitCode = 1;
+  }
+  const sampler = workload === "public-db"
     ? sampleReleasePublicLookup : sampleReleaseReadiness;
-  sampler({
+  if (process.exitCode !== 1) sampler({
     baseUrl: process.env.CAIAE_BENCH_API_URL,
     expectedRelease: process.env.CAIAE_BENCH_EXPECTED_RELEASE,
     iterations: process.env.CAIAE_BENCH_ITERATIONS === undefined

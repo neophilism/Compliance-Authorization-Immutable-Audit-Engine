@@ -50,7 +50,14 @@ test("isolated HTTP readiness benchmark traverses the real API and PostgreSQL", 
       redirect: "error", signal: AbortSignal.timeout(5000),
     });
     assert.equal(publicResponse.status, 200);
-    await publicResponse.body?.cancel();
+    const publicBody = await publicResponse.json() as {
+      found?: boolean; valid?: boolean; certificationId?: string | null;
+      publicArtifact?: unknown;
+    };
+    assert.equal(publicBody.found, false);
+    assert.equal(publicBody.valid, false);
+    assert.equal(publicBody.certificationId, null);
+    assert.equal(publicBody.publicArtifact, null);
     const publicResult = await benchmarkLoopbackHttp(publicUrl.href, {
       iterations: 20, concurrency: 4,
     });
