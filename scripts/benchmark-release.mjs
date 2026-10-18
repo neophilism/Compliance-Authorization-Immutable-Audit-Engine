@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { deploymentBaseUrl } from "./verify-deployment.mjs";
 
@@ -78,8 +79,66 @@ export async function sampleReleaseReadiness({
   });
 }
 
+/** Low-volume public database lookup with release identity checked before and after. */
+export async function sampleReleasePublicLookup({
+  baseUrl, expectedRelease, iterations = 10, fetchImpl = fetch,
+}) {
+  if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 20) {
+    throw new Error("Iterations must be 1-20");
+  }
+  const before = await sampleReleaseReadiness({
+    baseUrl, expectedRelease, iterations: 1, fetchImpl,
+  });
+  if (before.failures) throw new Error("Release readiness preflight failed");
+  const path = "/v1/public/certifications/verify/benchmark-" + randomUUID();
+  const samples = [];
+  let successes = 0, failures = 0;
+  for (let i = 0; i < iterations; i++) {
+    const start = performance.now();
+    try {
+      const response = await fetchImpl(before.origin + path, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        redirect: "error",
+        credentials: "omit",
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (response.status !== 200) {
+        await response.body?.cancel?.();
+        failures++;
+      } else {
+        const payload = await boundedJson(response);
+        if (payload?.found === false && payload?.valid === false &&
+            payload?.certificationId === null && payload?.publicArtifact === null) {
+          successes++;
+        } else {
+          failures++;
+        }
+      }
+    } catch {
+      failures++;
+    }
+    samples.push(performance.now() - start);
+  }
+  const after = await sampleReleaseReadiness({
+    baseUrl, expectedRelease, iterations: 1, fetchImpl,
+  });
+  if (after.failures) throw new Error("Release readiness postflight failed");
+  samples.sort((a, b) => a - b);
+  const percentile = fraction => samples[Math.ceil(fraction * samples.length) - 1];
+  return Object.freeze({
+    kind: "release-pinned-public-db-sample",
+    origin: before.origin, expectedRelease, requests: iterations,
+    successes, failures, p50Ms: percentile(.5), p95Ms: percentile(.95),
+    p99Ms: percentile(.99), productionSloVerified: false,
+  });
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  sampleReleaseReadiness({
+  const sampler = process.env.CAIAE_BENCH_WORKLOAD === "public-db"
+    ? sampleReleasePublicLookup : sampleReleaseReadiness;
+  sampler({
     baseUrl: process.env.CAIAE_BENCH_API_URL,
     expectedRelease: process.env.CAIAE_BENCH_EXPECTED_RELEASE,
     iterations: process.env.CAIAE_BENCH_ITERATIONS === undefined
