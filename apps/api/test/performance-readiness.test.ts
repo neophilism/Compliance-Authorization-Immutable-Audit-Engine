@@ -51,8 +51,11 @@ test("isolated HTTP readiness benchmark traverses the real API and PostgreSQL", 
     });
     assert.equal(publicResponse.status, 200);
     await publicResponse.body?.cancel();
-    const publicResult = await benchmarkLoopbackHttp(publicUrl.href, { iterations: 20 });
+    const publicResult = await benchmarkLoopbackHttp(publicUrl.href, {
+      iterations: 20, concurrency: 4,
+    });
     assert.equal(publicResult.requests, 20);
+    assert.equal(publicResult.concurrency, 4);
     assert.equal(publicResult.successes, 20);
     assert.equal(publicResult.failures, 0);
     assert.equal(publicResult.productionSloVerified, false);

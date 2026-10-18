@@ -27,3 +27,18 @@ test("abort during final request cannot return a misleading successful report",a
   iterations:1,signal:controller.signal,fetchImpl:async()=>{controller.abort();throw new Error("aborted");}
  }),/Benchmark aborted/);
 });
+test("bounded concurrency never exceeds configured active requests",async()=>{
+ let active=0,peak=0;
+ const result=await benchmarkLoopbackHttp("http://127.0.0.1:3000/ready",{
+  iterations:12,concurrency:3,fetchImpl:async()=>{
+   active++;peak=Math.max(peak,active);
+   await new Promise(resolve=>setImmediate(resolve));
+   active--;return {status:200,body:{cancel:async()=>{}}};
+  }
+ });
+ assert.equal(peak,3);assert.equal(result.concurrency,3);
+ assert.equal(result.requests,12);assert.equal(result.successes,12);
+ await assert.rejects(()=>benchmarkLoopbackHttp("http://localhost:3000",{
+  iterations:2,concurrency:3
+ }),/Concurrency/);
+});

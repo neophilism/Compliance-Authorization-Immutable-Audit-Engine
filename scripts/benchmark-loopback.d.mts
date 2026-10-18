@@ -1,6 +1,7 @@
 export interface LoopbackBenchmarkResult {
   readonly kind: "isolated-loopback-http";
   readonly requests: number;
+  readonly concurrency: number;
   readonly successes: number;
   readonly failures: number;
   readonly p50Ms: number;
@@ -10,5 +11,5 @@ export interface LoopbackBenchmarkResult {
 }
 export function benchmarkLoopbackHttp(
   urlText: string,
-  options?: { iterations?: number; signal?: AbortSignal; fetchImpl?: typeof fetch },
+  options?: { iterations?: number; concurrency?: number; signal?: AbortSignal; fetchImpl?: typeof fetch },
 ): Promise<LoopbackBenchmarkResult>;

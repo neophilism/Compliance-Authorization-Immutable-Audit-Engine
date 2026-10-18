@@ -1,38 +1,55 @@
 import { performance } from "node:perf_hooks";
-/** Isolated loopback HTTP performance probe only; never a production stress tool. */
+/** Bounded, credential-free loopback probe; never a production SLO claim. */
 export async function benchmarkLoopbackHttp(urlText, options = {}) {
   const url = new URL(urlText);
-  if (url.protocol !== "http:" || !["localhost","127.0.0.1","[::1]"].includes(url.hostname) ||
+  if (url.protocol !== "http:" ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
       url.username || url.password || url.hash) {
     throw new Error("Benchmark requires credential-free HTTP loopback target");
   }
   const iterations = options.iterations ?? 10;
+  const concurrency = options.concurrency ?? 1;
   if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 100) {
     throw new Error("Iterations must be 1-100");
   }
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 ||
+      concurrency > 8 || concurrency > iterations) {
+    throw new Error("Concurrency must be 1-8 and no more than iterations");
+  }
   const fetchImpl = options.fetchImpl ?? fetch;
   const samples = [];
-  let successes=0, failures=0;
-  for (let i=0;i<iterations;i++) {
+  let successes = 0, failures = 0, next = 0;
+  const sample = async () => {
     if (options.signal?.aborted) throw new Error("Benchmark aborted");
-    const begin=performance.now();
+    const begin = performance.now();
     try {
-      const response=await fetchImpl(url, {
-        method:"GET", redirect:"error", signal:options.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(2000)]) : AbortSignal.timeout(2000)
+      const signal = options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(2000)])
+        : AbortSignal.timeout(2000);
+      const response = await fetchImpl(url, {
+        method: "GET", redirect: "error", signal,
       });
       await response.body?.cancel?.();
-      if (response.status>=200 && response.status<300) successes++;
+      if (response.status >= 200 && response.status < 300) successes++;
       else failures++;
     } catch {
       if (options.signal?.aborted) throw new Error("Benchmark aborted");
       failures++;
     }
     if (options.signal?.aborted) throw new Error("Benchmark aborted");
-    samples.push(performance.now()-begin);
-  }
-  samples.sort((a,b)=>a-b);
-  const percentile = fraction => samples[Math.ceil(fraction*samples.length)-1];
-  return Object.freeze({kind:"isolated-loopback-http",requests:iterations,
-    successes,failures,p50Ms:percentile(.5),p95Ms:percentile(.95),
-    p99Ms:percentile(.99),productionSloVerified:false});
+    samples.push(performance.now() - begin);
+  };
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    while (next < iterations) {
+      next++;
+      await sample();
+    }
+  }));
+  samples.sort((a, b) => a - b);
+  const percentile = fraction => samples[Math.ceil(fraction * samples.length) - 1];
+  return Object.freeze({
+    kind: "isolated-loopback-http", requests: iterations, concurrency,
+    successes, failures, p50Ms: percentile(.5), p95Ms: percentile(.95),
+    p99Ms: percentile(.99), productionSloVerified: false,
+  });
 }
