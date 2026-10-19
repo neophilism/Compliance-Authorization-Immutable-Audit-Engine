@@ -100,7 +100,7 @@ export async function sampleReleaseReadiness({
 
 /** Low-volume public database lookup with release identity checked before and after. */
 export async function sampleReleasePublicLookup({
-  baseUrl, expectedRelease, iterations = 10, fetchImpl = fetch,
+  baseUrl, expectedRelease, iterations = 10, timeoutMs = 5000, fetchImpl = fetch,
 }) {
   if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 20) {
     throw new Error("Iterations must be 1-20");
