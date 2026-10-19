@@ -62,6 +62,37 @@ test("invalid target, release identity and sample count fail before requests", a
   }
   assert.equal(calls, 0);
 });
+test("benchmark cancels stalled headers and body reads", async () => {
+  const options = { baseUrl: "https://api.example.gov", expectedRelease: sha,
+    iterations: 1, timeoutMs: 20 };
+  const start = Date.now();
+  const pending = await sampleReleaseReadiness({
+    ...options, fetchImpl: () => new Promise(() => {}),
+  });
+  assert.equal(pending.failures, 1);
+  let cancelled = false;
+  const stream = new ReadableStream({
+    pull() { return new Promise(() => {}); },
+    cancel() { cancelled = true; },
+  });
+  const stalled = await sampleReleaseReadiness({ ...options,
+    fetchImpl: async () => new Response(stream, { status: 200 }),
+  });
+  assert.equal(stalled.failures, 1);
+  assert.equal(cancelled, true);
+  assert.ok(Date.now() - start < 3000);
+});
+
+test("benchmark rejects substituted response locations", async () => {
+  const response = ready(sha);
+  Object.defineProperty(response, "url", { value: "https://other.example.gov/ready" });
+  const report = await sampleReleaseReadiness({
+    baseUrl: "https://api.example.gov", expectedRelease: sha,
+    iterations: 1, fetchImpl: async () => response,
+  });
+  assert.equal(report.failures, 1);
+});
+
 test("public database read is pinned by readiness before and after", async () => {
  const urls = [];
  const report = await sampleReleasePublicLookup({

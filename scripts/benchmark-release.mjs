@@ -3,22 +3,33 @@ import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { deploymentBaseUrl } from "./verify-deployment.mjs";
 
-async function boundedJson(response) {
+async function boundedWait(promise, signal) {
+  if (signal.aborted) throw new Error("Benchmark request timed out");
+  let onAbort;
+  const abort = new Promise((_, reject) => {
+    onAbort = () => reject(new Error("Benchmark request timed out"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try { return await Promise.race([promise, abort]); }
+  finally { signal.removeEventListener("abort", onAbort); }
+}
+
+async function boundedJson(response, signal) {
   if (!response.body) throw new Error("Missing response body");
   const reader = response.body.getReader();
   const chunks = [];
   let bytes = 0;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await boundedWait(reader.read(), signal);
       if (done) break;
       bytes += value.byteLength;
       if (bytes > 16384) throw new Error("Response body exceeds limit");
       chunks.push(value);
     }
   } finally {
-    if (bytes > 16384) await reader.cancel().catch(() => {});
-    reader.releaseLock();
+    if (bytes > 16384 || signal.aborted) void reader.cancel().catch(() => {});
+    try { reader.releaseLock(); } catch { /* pending read cancelled */ }
   }
   const data = new Uint8Array(bytes);
   let offset = 0;
@@ -31,7 +42,7 @@ async function boundedJson(response) {
 
 /** Low-volume deployment readiness sample, never a production SLO verdict. */
 export async function sampleReleaseReadiness({
-  baseUrl, expectedRelease, iterations = 10, fetchImpl = fetch,
+  baseUrl, expectedRelease, iterations = 10, timeoutMs = 5000, fetchImpl = fetch,
 }) {
   const origin = deploymentBaseUrl(baseUrl);
   if (typeof expectedRelease !== "string" || !/^[0-9a-f]{40}$/i.test(expectedRelease)) {
@@ -40,24 +51,32 @@ export async function sampleReleaseReadiness({
   if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 20) {
     throw new Error("Iterations must be 1-20");
   }
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10000) {
+    throw new Error("Invalid benchmark timeout");
+  }
   const samples = [];
   let successes = 0, failures = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
     try {
-      const response = await fetchImpl(origin + "/ready", {
+      const signal = AbortSignal.timeout(timeoutMs);
+      const requestUrl = origin + "/ready";
+      const response = await boundedWait(fetchImpl(requestUrl, {
         method: "GET",
         headers: { accept: "application/json" },
         redirect: "error",
         credentials: "omit",
         cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-      });
+        signal,
+      }), signal);
+      if (response.redirected || (response.url && response.url !== requestUrl)) {
+        throw new Error("Redirected benchmark response");
+      }
       if (response.status !== 200) {
         await response.body?.cancel?.();
         failures++;
       } else {
-        const payload = await boundedJson(response);
+        const payload = await boundedJson(response, signal);
         if (payload?.status === "ready" && payload?.release === expectedRelease) {
           successes++;
         } else {
@@ -86,8 +105,11 @@ export async function sampleReleasePublicLookup({
   if (!Number.isSafeInteger(iterations) || iterations < 1 || iterations > 20) {
     throw new Error("Iterations must be 1-20");
   }
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10000) {
+    throw new Error("Invalid benchmark timeout");
+  }
   const before = await sampleReleaseReadiness({
-    baseUrl, expectedRelease, iterations: 1, fetchImpl,
+    baseUrl, expectedRelease, iterations: 1, timeoutMs, fetchImpl,
   });
   if (before.failures) throw new Error("Release readiness preflight failed");
   const path = "/v1/public/certifications/verify/benchmark-" + randomUUID();
@@ -96,19 +118,24 @@ export async function sampleReleasePublicLookup({
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
     try {
-      const response = await fetchImpl(before.origin + path, {
+      const signal = AbortSignal.timeout(timeoutMs);
+      const requestUrl = before.origin + path;
+      const response = await boundedWait(fetchImpl(requestUrl, {
         method: "GET",
         headers: { accept: "application/json" },
         redirect: "error",
         credentials: "omit",
         cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-      });
+        signal,
+      }), signal);
+      if (response.redirected || (response.url && response.url !== requestUrl)) {
+        throw new Error("Redirected benchmark response");
+      }
       if (response.status !== 200) {
         await response.body?.cancel?.();
         failures++;
       } else {
-        const payload = await boundedJson(response);
+        const payload = await boundedJson(response, signal);
         if (payload?.found === false && payload?.valid === false &&
             payload?.certificationId === null && payload?.publicArtifact === null) {
           successes++;
@@ -122,7 +149,7 @@ export async function sampleReleasePublicLookup({
     samples.push(performance.now() - start);
   }
   const after = await sampleReleaseReadiness({
-    baseUrl, expectedRelease, iterations: 1, fetchImpl,
+    baseUrl, expectedRelease, iterations: 1, timeoutMs, fetchImpl,
   });
   if (after.failures) throw new Error("Release readiness postflight failed");
   samples.sort((a, b) => a - b);
