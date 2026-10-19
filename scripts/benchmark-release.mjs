@@ -16,8 +16,7 @@ async function boundedWait(promise, signal) {
 
 async function boundedJson(response, signal) {
   const mediaType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
-  if (!mediaType || !/^application\\/(?:json|[a-z0-9!#async function boundedJson(response, signal) {
-  if (!response.body) throw new Error("Missing response body");^_.+-]+\\+json)$/u.test(mediaType)) {
+  if (!mediaType || !/^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)$/u.test(mediaType)) {
     throw new Error("Expected JSON benchmark response");
   }
   const length = response.headers.get("content-length");
