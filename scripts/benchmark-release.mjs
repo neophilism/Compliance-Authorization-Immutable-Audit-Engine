@@ -15,6 +15,16 @@ async function boundedWait(promise, signal) {
 }
 
 async function boundedJson(response, signal) {
+  const mediaType = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (!mediaType || !/^application\\/(?:json|[a-z0-9!#async function boundedJson(response, signal) {
+  if (!response.body) throw new Error("Missing response body");^_.+-]+\\+json)$/u.test(mediaType)) {
+    throw new Error("Expected JSON benchmark response");
+  }
+  const length = response.headers.get("content-length");
+  if (length !== null && (!/^\\d+$/u.test(length) ||
+      !Number.isSafeInteger(Number(length)) || Number(length) > 16384)) {
+    throw new Error("Invalid benchmark content length");
+  }
   if (!response.body) throw new Error("Missing response body");
   const reader = response.body.getReader();
   const chunks = [];

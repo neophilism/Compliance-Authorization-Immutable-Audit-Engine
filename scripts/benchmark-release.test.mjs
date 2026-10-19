@@ -93,6 +93,20 @@ test("benchmark rejects substituted response locations", async () => {
   assert.equal(report.failures, 1);
 });
 
+test("non-JSON or excessive length cannot count as readiness", async () => {
+  const invalid = await sampleReleaseReadiness({
+    baseUrl: "https://api.example.gov", expectedRelease: sha, iterations: 2,
+    fetchImpl: async (_url, options) => {
+      if (options.signal.aborted) throw new Error("aborted");
+      return new Response(JSON.stringify({ status: "ready", release: sha }), {
+        status: 200, headers: { "content-type": "text/html", "content-length": "50000" },
+      });
+    },
+  });
+  assert.equal(invalid.successes, 0);
+  assert.equal(invalid.failures, 2);
+});
+
 test("public database read is pinned by readiness before and after", async () => {
  const urls = [];
  const report = await sampleReleasePublicLookup({
@@ -102,7 +116,7 @@ test("public database read is pinned by readiness before and after", async () =>
    if(url.endsWith("/ready")) return ready(sha);
    return new Response(JSON.stringify({
     found:false,valid:false,certificationId:null,publicArtifact:null
-   }),{status:200});
+   }),{status:200,headers:{"content-type":"application/json"}});
   }
  });
  assert.equal(urls.length,4);
@@ -120,7 +134,7 @@ test("public lookup fails on changed release or unexpectedly found certificate",
    if(url.endsWith("/ready"))return ready(count===3?"b".repeat(40):sha);
    return new Response(JSON.stringify({
     found:false,valid:false,certificationId:null,publicArtifact:null
-   }),{status:200});
+   }),{status:200,headers:{"content-type":"application/json"}});
   }
  }),/postflight/);
  const report=await sampleReleasePublicLookup({
