@@ -199,6 +199,10 @@ test("invalid measurements and fabricated latency are rejected before signing", 
   }
   assert.throws(() => metricEnvelope(valid, "invalid delivery\n"));
   for (const samples of [[NaN], [-1], [Infinity], "not samples"]) assert.throws(() => p95(samples));
+  for (const stamp of ["2020-01-01T00:00:00Z", "2099-01-01T00:00:00Z",
+                       "2026-10-19T00:00:00", "not-a-timestamp"]) {
+    assert.throws(() => metricEnvelope({ ...valid, observedAt: stamp }), /Monitoring evidence|Invalid measured/);
+  }
   assert.throws(() => signedTelemetry({}, "bad\nkey", SECRET));
   assert.throws(() => signedTelemetry({}, "key", SECRET, NaN));
 });
@@ -295,7 +299,7 @@ test("real loopback HTTP transport never forwards a signed redirect or retries a
 
 test("total outages omit latency instead of reporting zero", () => {
   const envelope = metricEnvelope({
-    count: 5, success: 0, observedAt: "2026-10-09T00:00:00.000Z", latencyP95Ms: null,
+    count: 5, success: 0, observedAt: new Date().toISOString(), latencyP95Ms: null,
   }, "outage");
   assert.equal(envelope.records.length, 2);
   assert.equal(envelope.records[0].value, 0);
@@ -305,7 +309,7 @@ test("total outages omit latency instead of reporting zero", () => {
 test("signed delivery authenticates the exact HTTP body and is not logged", async () => {
   const secret = "minimum-32-byte-test-secret-for-hmac-testing";
   const envelope = metricEnvelope({
-    count: 5, success: 5, observedAt: "2026-10-09T00:00:00.000Z", latencyP95Ms: 8,
+    count: 5, success: 5, observedAt: new Date().toISOString(), latencyP95Ms: 8,
   }, "probe-123");
   const signed = signedTelemetry(envelope, "caiae-test", secret, 1791500000000);
   const expected = createHmac("sha256", secret)

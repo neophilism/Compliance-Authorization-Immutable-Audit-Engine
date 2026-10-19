@@ -178,6 +178,11 @@ export function metricEnvelope(probe, id = randomUUID()) {
     throw new Error("Invalid measured monitoring evidence");
   }
   const stamp = probe.observedAt;
+  if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(stamp) ||
+      Date.now() - Date.parse(stamp) > 120000 ||
+      Date.parse(stamp) - Date.now() > 30000) {
+    throw new Error("Monitoring evidence must be fresh and timezone-qualified");
+  }
   const availability = Math.round(10000 * probe.success / probe.count) / 100;
   const records = [
     { kind: "metric", externalId: id + "-availability", metric: "availability-percent", value: availability, observedAt: stamp },
