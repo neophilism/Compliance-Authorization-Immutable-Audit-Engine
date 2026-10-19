@@ -87,7 +87,10 @@ export async function sampleReleaseReadiness({
         failures++;
       } else {
         const payload = await boundedJson(response, signal);
-        if (payload?.status === "ready" && payload?.release === expectedRelease) {
+        if (payload?.status === "ready" && payload?.service === "api" &&
+            typeof payload?.schemaVersion === "string" &&
+            /^\\d{4}_[a-z][a-z0-9_]*$/u.test(payload.schemaVersion) &&
+            payload?.release === expectedRelease) {
           successes++;
         } else {
           failures++;

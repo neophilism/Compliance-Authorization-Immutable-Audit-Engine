@@ -4,7 +4,7 @@ import { sampleReleaseReadiness, sampleReleasePublicLookup } from "./benchmark-r
 
 const sha = "a".repeat(40);
 const ready = release => new Response(JSON.stringify({
-  status: "ready", release,
+  status: "ready", service: "api", schemaVersion: "0014_worker_activity", release,
 }), { status: 200, headers: { "content-type": "application/json" } });
 
 test("release pinned samples require exact SHA and omit credentials", async () => {
@@ -29,6 +29,22 @@ test("release pinned samples require exact SHA and omit credentials", async () =
     assert.equal(request.options.redirect, "error");
     assert.equal(request.options.credentials, "omit");
     assert.equal(request.options.headers.authorization, undefined);
+  }
+});
+
+test("readiness samples reject unrelated service or missing schema", async () => {
+  for (const invalid of [
+    { status:"ready", release: sha },
+    { status:"ready", service:"other", schemaVersion:"0014_worker_activity", release:sha },
+    { status:"ready", service:"api", schemaVersion:"invalid", release:sha },
+  ]) {
+    const report = await sampleReleaseReadiness({
+      baseUrl:"https://api.example.gov", expectedRelease:sha, iterations:1,
+      fetchImpl:async()=>new Response(JSON.stringify(invalid),{
+        status:200,headers:{"content-type":"application/json"},
+      }),
+    });
+    assert.equal(report.successes,0);
   }
 });
 
