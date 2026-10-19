@@ -22,7 +22,7 @@ function mockBody(path, token, release) {
   if (path.includes("/public/certifications/verify/")) return {
     found: false, valid: false, certificationId: null, certificateNumber: null,
     storedStatus: null, effectiveStatus: null, publicArtifact: null,
-    checkedAt: "2026-10-17T11:00:00.000Z",
+    checkedAt: new Date().toISOString(),
   };
   return {};
 }
@@ -154,7 +154,7 @@ test("rejects URL parser normalization and empty query/fragment ambiguity", () =
   for (const raw of [
     "https://10.0.0.1", "https://172.16.0.1", "https://192.168.1.2",
     "https://169.254.169.254", "https://127.0.0.2",
-    "https://100.64.0.1", "https://[fc00::1]",
+    "https://100.64.0.1", "https://[fc00::1]", "https://8.8.8.8",
   ]) assert.throws(() => deploymentBaseUrl(raw), /forbidden/);
   assert.equal(deploymentBaseUrl("http://[::1]:4000/"), "http://[::1]:4000");
 });
@@ -168,6 +168,9 @@ for (const [name, change] of [
   ["error JSON with HTTP200", (body, path) => path.includes("/verify/") ? { error: "database unavailable" } : body],
   ["nonexistent certification marked valid", (body, path) => path.includes("/verify/") ? { ...body, valid: true } : body],
   ["private artifact in nonexistent result", (body, path) => path.includes("/verify/") ? { ...body, publicArtifact: {} } : body],
+  ["stale public verification timestamp", (body, path) => path.includes("/verify/") ? { ...body, checkedAt: "2020-01-01T00:00:00Z" } : body],
+  ["timezone-unqualified public verification timestamp", (body, path) => path.includes("/verify/") ? { ...body, checkedAt: "2026-10-19T00:00:00" } : body],
+  ["future public verification timestamp", (body, path) => path.includes("/verify/") ? { ...body, checkedAt: "2099-01-01T00:00:00Z" } : body],
   ["wrong OpenAPI version", (body, path) => path === "/openapi.json" ? { ...body, openapi: "2.0" } : body],
   ["missing GET route", (body, path) => path === "/openapi.json" ? { ...body, paths: { "/ready": {} } } : body],
   ["legacy invented identity shape", (body, path, options) => path === "/v1/security/me" && options.headers.authorization ? { principal: { id: "p" }, organization: { id: "o" } } : body],

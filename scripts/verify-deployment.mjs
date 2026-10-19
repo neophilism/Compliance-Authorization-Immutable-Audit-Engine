@@ -20,19 +20,10 @@ export function deploymentBaseUrl(raw) {
   const host = url.hostname.toLowerCase();
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(host);
   const literal = isIP(host.replace(/^\\[|\\]$/g, ""));
-  if (literal === 4 && !local) {
-    const octets = host.split(".").map(Number);
-    const [a, b] = octets;
-    if (a === 0 || a === 10 || a === 127 || a >= 224 ||
-        (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)) {
-      throw new Error("Private or reserved literal deployment address is forbidden");
-    }
-  }
-  if (literal === 6 && !local) {
-    // A live deployment uses an approved public hostname. Literal IPv6
-    // origins are refused rather than accidentally hitting internal targets.
-    throw new Error("Literal IPv6 deployment origins are forbidden");
+  // Only explicitly requested local test origins may use literal addresses.
+  // Public production origin references must be named, TLS-backed services.
+  if (literal && !local) {
+    throw new Error("Non-loopback IP literal deployment origin is forbidden");
   }
   if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
     throw new Error("Remote deployment URL must use HTTPS");
@@ -192,7 +183,10 @@ export async function verifyDeployment({
   if (absent.found !== false || absent.valid !== false ||
       ["certificationId", "certificateNumber", "storedStatus", "effectiveStatus", "publicArtifact"]
         .some(key => absent[key] !== null) || typeof absent.checkedAt !== "string" ||
-      !Number.isFinite(Date.parse(absent.checkedAt))) {
+      !Number.isFinite(Date.parse(absent.checkedAt)) ||
+      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(absent.checkedAt) ||
+      Date.now() - Date.parse(absent.checkedAt) > 10 * 60 * 1000 ||
+      Date.parse(absent.checkedAt) - Date.now() > 60 * 1000) {
     throw new Error("Public verification did not reject the nonexistent certification");
   }
   let authenticated = false;
