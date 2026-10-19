@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { isIP } from "node:net";
 
 export function httpsOrigin(raw, label) {
   if (typeof raw !== "string" || !raw) throw new Error(label + " is required");
@@ -12,6 +13,11 @@ export function httpsOrigin(raw, label) {
     throw new Error(label + " must contain only an origin");
   }
   if (url.protocol !== "https:") throw new Error(label + " must use HTTPS");
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost") ||
+      isIP(hostname.replace(/^\\[|\\]$/g, ""))) {
+    throw new Error(label + " must use a named public HTTPS service");
+  }
   return url.origin;
 }
 

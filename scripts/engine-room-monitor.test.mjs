@@ -21,6 +21,11 @@ test("production monitoring requires HTTPS origins with no embedded credentials"
   assert.throws(() => httpsOrigin("http://engine.example", "API"), /HTTPS/);
   assert.throws(() => httpsOrigin("https://name:secret@engine.example", "API"), /origin/);
   assert.throws(() => httpsOrigin("https://engine.example/hidden", "API"), /origin/);
+  for (const origin of ["https://169.254.169.254", "https://127.0.0.1",
+                       "https://10.0.0.5", "https://[::1]", "https://localhost",
+                       "https://[fc00::1]"]) {
+    assert.throws(() => httpsOrigin(origin, "API"), /named public HTTPS service/);
+  }
 });
 
 test("p95 uses observed samples, never a fabricated latency on outage", () => {
