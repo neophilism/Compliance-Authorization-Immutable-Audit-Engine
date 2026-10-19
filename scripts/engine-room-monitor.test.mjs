@@ -100,7 +100,8 @@ for (const [name, patch] of [
   ["minimal ready object", null], ["wrong service", { service: "other" }],
   ["no release", { release: null }], ["short release", { release: "abc123" }],
   ["numeric schema", { schemaVersion: 14 }], ["no schema", { schemaVersion: null }],
-  ["no timestamp", { timestamp: null }], ["stale timestamp", { timestamp: "2000-01-01T00:00:00Z" }],
+  ["no timestamp", { timestamp: null }], ["unqualified timestamp", { timestamp: "2026-10-19T12:00:00" }],
+  ["stale timestamp", { timestamp: "2000-01-01T00:00:00Z" }],
   ["future timestamp", { timestamp: "2999-01-01T00:00:00Z" }],
   ["not ready", { status: "not_ready" }],
 ]) {

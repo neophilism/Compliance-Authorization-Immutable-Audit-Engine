@@ -153,7 +153,9 @@ export async function probeApi(origin, {
           !/^\d{4}_[a-z][a-z0-9_]*$/.test(body.schemaVersion)) continue;
       commitSha(body.release);
       if (expectedRelease && body.release !== expectedRelease) continue;
-      const stamp = typeof body.timestamp === "string" ? Date.parse(body.timestamp) : NaN;
+      const qualified = typeof body.timestamp === "string" &&
+        /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(body.timestamp);
+      const stamp = qualified ? Date.parse(body.timestamp) : NaN;
       const age = Date.now() - stamp;
       if (!Number.isFinite(stamp) || age < -30000 || age > 60000) continue;
       if (sampledRelease && (body.release !== sampledRelease || body.schemaVersion !== sampledSchema)) continue;
