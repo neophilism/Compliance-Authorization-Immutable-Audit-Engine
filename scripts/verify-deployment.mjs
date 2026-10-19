@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { isIP } from "node:net";
 
 export function deploymentBaseUrl(raw) {
   if (typeof raw !== "string" || !raw.trim()) {
@@ -16,7 +17,23 @@ export function deploymentBaseUrl(raw) {
   if (!/^[a-z]+:\/\/[^/?#]+\/?$/i.test(raw)) {
     throw new Error("API URL must be an unambiguous origin");
   }
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const host = url.hostname.toLowerCase();
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(host);
+  const literal = isIP(host.replace(/^\\[|\\]$/g, ""));
+  if (literal === 4 && !local) {
+    const octets = host.split(".").map(Number);
+    const [a, b] = octets;
+    if (a === 0 || a === 10 || a === 127 || a >= 224 ||
+        (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)) {
+      throw new Error("Private or reserved literal deployment address is forbidden");
+    }
+  }
+  if (literal === 6 && !local) {
+    // A live deployment uses an approved public hostname. Literal IPv6
+    // origins are refused rather than accidentally hitting internal targets.
+    throw new Error("Literal IPv6 deployment origins are forbidden");
+  }
   if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
     throw new Error("Remote deployment URL must use HTTPS");
   }

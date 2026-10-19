@@ -151,6 +151,11 @@ test("rejects URL parser normalization and empty query/fragment ambiguity", () =
     "https:engine.example", "https://engine.example\\anything", "http://localhost.evil",
     "ftp://localhost", "https://user:pass@engine.example",
   ]) assert.throws(() => deploymentBaseUrl(raw));
+  for (const raw of [
+    "https://10.0.0.1", "https://172.16.0.1", "https://192.168.1.2",
+    "https://169.254.169.254", "https://127.0.0.2",
+    "https://100.64.0.1", "https://[fc00::1]",
+  ]) assert.throws(() => deploymentBaseUrl(raw), /forbidden/);
   assert.equal(deploymentBaseUrl("http://[::1]:4000/"), "http://[::1]:4000");
 });
 
