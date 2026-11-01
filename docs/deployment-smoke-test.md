@@ -29,9 +29,16 @@ matching principal/organization associations and role/permission arrays. This
 proves only the returned credential's scope, not general cross-tenant isolation.
 
 The nonexistent-certification probe must return `found: false`, `valid: false`,
-null certificate/artifact fields and a parseable check time. HTTP 200 with an
+null certificate/artifact fields and a fresh timezone-qualified check time (no more
+than ten minutes old or one minute ahead). Both UTC `Z` and explicit timezone
+offsets are accepted. HTTP 200 with an
 error object, an arbitrary JSON body or an invented valid certificate fails.
 OpenAPI must declare the required GET operations in a version 3 document.
+
+Non-loopback IPv4 and IPv6 literal origins are rejected before any request,
+including mapped IPv4 addresses. Only the explicit localhost/127.0.0.1/::1 test
+origins are exempt; production origins must be named HTTPS services. Origin
+validation does not replace DNS/network egress enforcement.
 
 All requests are GET with no redirects, ambient cookies or caching. The operator
 token is sent only to the final identity request on the configured origin.

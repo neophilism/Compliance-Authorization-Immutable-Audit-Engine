@@ -57,6 +57,28 @@ test("requires TLS for non-loopback deploy URLs", () => {
   assert.throws(() => deploymentBaseUrl("https://engine.example/path"), /origin/);
 });
 
+for (const offset of ["Z", "+00:00", "-00:00"]) {
+  test("accepts fresh timezone-qualified verification timestamp " + offset, async () => {
+    const checkedAt = new Date().toISOString().replace(/Z$/, offset);
+    const { fetchImpl } = mockedApi({
+      change: (body, path) => path.includes("/public/certifications/verify/")
+        ? { ...body, checkedAt } : body,
+    });
+    assert.equal((await verifyDeployment({ ...OPTIONS, fetchImpl })).release, RELEASE);
+  });
+}
+
+for (const host of ["[fc00::1]", "[fe80::1]", "[::ffff:127.0.0.1]", "[2001:db8::1]"]) {
+  test("rejects IPv6 literal before authenticated requests: " + host, async () => {
+    let requests = 0;
+    await assert.rejects(verifyDeployment({
+      ...OPTIONS, baseUrl: "https://" + host, operatorToken: "synthetic-fixture-token",
+      requireAuth: true, fetchImpl: async () => { requests++; throw new Error("unexpected request"); },
+    }), /forbidden/);
+    assert.equal(requests, 0);
+  });
+}
+
 test("checks live release, readiness, authorization, public endpoint and OpenAPI", async () => {
   const { fetchImpl, seen } = mockedApi();
   const result = await verifyDeployment({
@@ -287,4 +309,5 @@ test("real HTTP fixture verifies the actual operator contract and stops authenti
   assert.equal(seen.filter(item => item.token).every(item => item.path === "/v1/security/me"), true);
   assert.equal(seen.every(item => item.method === "GET"), true);
 });
+
 

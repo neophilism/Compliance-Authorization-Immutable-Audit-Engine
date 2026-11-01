@@ -19,7 +19,7 @@ export function deploymentBaseUrl(raw) {
   }
   const host = url.hostname.toLowerCase();
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(host);
-  const literal = isIP(host.replace(/^\\[|\\]$/g, ""));
+  const literal = isIP(host.replace(/^\[|\]$/g, ""));
   // Only explicitly requested local test origins may use literal addresses.
   // Public production origin references must be named, TLS-backed services.
   if (literal && !local) {
@@ -184,7 +184,7 @@ export async function verifyDeployment({
       ["certificationId", "certificateNumber", "storedStatus", "effectiveStatus", "publicArtifact"]
         .some(key => absent[key] !== null) || typeof absent.checkedAt !== "string" ||
       !Number.isFinite(Date.parse(absent.checkedAt)) ||
-      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(absent.checkedAt) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(absent.checkedAt) ||
       Date.now() - Date.parse(absent.checkedAt) > 10 * 60 * 1000 ||
       Date.parse(absent.checkedAt) - Date.now() > 60 * 1000) {
     throw new Error("Public verification did not reject the nonexistent certification");
@@ -230,4 +230,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 1;
   });
 }
+
 
