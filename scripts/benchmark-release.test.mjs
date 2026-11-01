@@ -1,11 +1,51 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { sampleReleaseReadiness, sampleReleasePublicLookup } from "./benchmark-release.mjs";
 
 const sha = "a".repeat(40);
 const ready = release => new Response(JSON.stringify({
   status: "ready", service: "api", schemaVersion: "0014_worker_activity", release,
 }), { status: 200, headers: { "content-type": "application/json" } });
+
+test("real loopback HTTP accepts valid content lengths for readiness and public reads", async t => {
+  const paths = [];
+  const server = createServer((req, res) => {
+    paths.push(req.url);
+    const body = JSON.stringify(req.url === "/ready"
+      ? { status: "ready", service: "api", schemaVersion: "0014_worker_activity", release: sha }
+      : { found: false, valid: false, certificationId: null, publicArtifact: null });
+    res.writeHead(200, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
+    res.end(body);
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  const baseUrl = "http://127.0.0.1:" + server.address().port;
+  const report = await sampleReleasePublicLookup({ baseUrl, expectedRelease: sha, iterations: 2 });
+  assert.equal(report.successes, 2);
+  assert.equal(report.failures, 0);
+  assert.equal(paths.length, 4);
+});
+
+for (const mode of ["bad media type", "bad length", "redirected", "unavailable"]) {
+  test("cancels " + mode + " responses without awaiting uncooperative cleanup", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream({
+      pull() { return new Promise(() => {}); },
+      cancel() { cancelled = true; return new Promise(() => {}); },
+    });
+    const response = new Response(stream, {
+      status: mode === "unavailable" ? 503 : 200,
+      headers: { "content-type": mode === "bad media type" ? "text/html" : "application/json",
+        ...(mode === "bad length" ? { "content-length": "NaN" } : {}) },
+    });
+    if (mode === "redirected") Object.defineProperty(response, "redirected", { value: true });
+    const report = await sampleReleaseReadiness({ baseUrl: "https://api.example.gov",
+      expectedRelease: sha, iterations: 1, timeoutMs: 20, fetchImpl: async () => response });
+    assert.equal(report.failures, 1);
+    assert.equal(cancelled, true);
+  });
+}
 
 test("release pinned samples require exact SHA and omit credentials", async () => {
   const requests = [];
@@ -92,7 +132,8 @@ test("benchmark cancels stalled headers and body reads", async () => {
     cancel() { cancelled = true; },
   });
   const stalled = await sampleReleaseReadiness({ ...options,
-    fetchImpl: async () => new Response(stream, { status: 200 }),
+    fetchImpl: async () => new Response(stream, { status: 200,
+      headers: { "content-type": "application/json" } }),
   });
   assert.equal(stalled.failures, 1);
   assert.equal(cancelled, true);
@@ -161,3 +202,4 @@ test("public lookup fails on changed release or unexpectedly found certificate",
  });
  assert.equal(report.successes,0);assert.equal(report.failures,1);
 });
+

@@ -20,7 +20,7 @@ async function boundedJson(response, signal) {
     throw new Error("Expected JSON benchmark response");
   }
   const length = response.headers.get("content-length");
-  if (length !== null && (!/^\\d+$/u.test(length) ||
+  if (length !== null && (!/^\d+$/u.test(length) ||
       !Number.isSafeInteger(Number(length)) || Number(length) > 16384)) {
     throw new Error("Invalid benchmark content length");
   }
@@ -37,7 +37,7 @@ async function boundedJson(response, signal) {
       chunks.push(value);
     }
   } finally {
-    if (bytes > 16384 || signal.aborted) void reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     try { reader.releaseLock(); } catch { /* pending read cancelled */ }
   }
   const data = new Uint8Array(bytes);
@@ -67,10 +67,13 @@ export async function sampleReleaseReadiness({
   let successes = 0, failures = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response;
     try {
-      const signal = AbortSignal.timeout(timeoutMs);
+      const signal = controller.signal;
       const requestUrl = origin + "/ready";
-      const response = await boundedWait(fetchImpl(requestUrl, {
+      response = await boundedWait(fetchImpl(requestUrl, {
         method: "GET",
         headers: { accept: "application/json" },
         redirect: "error",
@@ -82,13 +85,13 @@ export async function sampleReleaseReadiness({
         throw new Error("Redirected benchmark response");
       }
       if (response.status !== 200) {
-        await response.body?.cancel?.();
+        void response.body?.cancel?.().catch(() => {});
         failures++;
       } else {
         const payload = await boundedJson(response, signal);
         if (payload?.status === "ready" && payload?.service === "api" &&
             typeof payload?.schemaVersion === "string" &&
-            /^\\d{4}_[a-z][a-z0-9_]*$/u.test(payload.schemaVersion) &&
+            /^\d{4}_[a-z][a-z0-9_]*$/u.test(payload.schemaVersion) &&
             payload?.release === expectedRelease) {
           successes++;
         } else {
@@ -97,6 +100,12 @@ export async function sampleReleaseReadiness({
       }
     } catch {
       failures++;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+      if (response?.body && !response.body.locked) {
+        void response.body.cancel().catch(() => {});
+      }
     }
     samples.push(performance.now() - start);
   }
@@ -129,10 +138,13 @@ export async function sampleReleasePublicLookup({
   let successes = 0, failures = 0;
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response;
     try {
-      const signal = AbortSignal.timeout(timeoutMs);
+      const signal = controller.signal;
       const requestUrl = before.origin + path;
-      const response = await boundedWait(fetchImpl(requestUrl, {
+      response = await boundedWait(fetchImpl(requestUrl, {
         method: "GET",
         headers: { accept: "application/json" },
         redirect: "error",
@@ -144,7 +156,7 @@ export async function sampleReleasePublicLookup({
         throw new Error("Redirected benchmark response");
       }
       if (response.status !== 200) {
-        await response.body?.cancel?.();
+        void response.body?.cancel?.().catch(() => {});
         failures++;
       } else {
         const payload = await boundedJson(response, signal);
@@ -157,6 +169,12 @@ export async function sampleReleasePublicLookup({
       }
     } catch {
       failures++;
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+      if (response?.body && !response.body.locked) {
+        void response.body.cancel().catch(() => {});
+      }
     }
     samples.push(performance.now() - start);
   }
@@ -195,3 +213,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 1;
   });
 }
+

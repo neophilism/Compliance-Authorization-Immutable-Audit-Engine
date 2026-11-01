@@ -11,3 +11,16 @@ Run the read-only probe against an authorized local isolated API with `node scri
 For a low-volume deployment sample, an operator may set `CAIAE_BENCH_API_URL` to the authorized HTTPS API origin and `CAIAE_BENCH_EXPECTED_RELEASE` to the full 40-character deployed commit, then run `node scripts/benchmark-release.mjs`. Optional `CAIAE_BENCH_ITERATIONS` is capped at 20; requests are sequential, credential-free GETs to `/ready`, with no redirects or cookies, five-second deadlines and 16-KiB response limits. The sampler fails its CLI exit status if any request or release identity check fails. A successful sample is still not a production SLO or release approval; review traffic, load, recovery and monitoring evidence separately.
 
 Set `CAIAE_BENCH_WORKLOAD=public-db` for the optional public certificate lookup sample. It checks the full release identity before and after up to 20 sequential reads, requires a nonexistent certificate to remain invalid, and fails if the deployed release changes across the sample. This does not prove traffic mix, sustained load, or release acceptance.
+
+## November 1 regression repair
+
+Corrected overescaped schema/content-length regexes that rejected real readiness
+responses. Both sample paths now keep a live deadline through headers and body,
+abort on completion, and cancel rejected streams without waiting on uncooperative
+cleanup. Body readers are cancelled on validation failures as well as timeouts.
+
+The isolated release sampler suite passes 14 tests, including actual loopback
+HTTP readiness/public reads with Content-Length and rejected-response cleanup.
+The stalled-body fixture now supplies JSON media type so it reaches body reads.
+No production SLO, live deployment, real database load or restore is established
+by these local tests. Full exact-head CI remains separately required.
