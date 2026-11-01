@@ -15,7 +15,7 @@ export function httpsOrigin(raw, label) {
   if (url.protocol !== "https:") throw new Error(label + " must use HTTPS");
   const hostname = url.hostname.toLowerCase();
   if (hostname === "localhost" || hostname.endsWith(".localhost") ||
-      isIP(hostname.replace(/^\\[|\\]$/g, ""))) {
+      isIP(hostname.replace(/^\[|\]$/g, ""))) {
     throw new Error(label + " must use a named public HTTPS service");
   }
   return url.origin;
@@ -154,7 +154,7 @@ export async function probeApi(origin, {
       commitSha(body.release);
       if (expectedRelease && body.release !== expectedRelease) continue;
       const qualified = typeof body.timestamp === "string" &&
-        /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(body.timestamp);
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(body.timestamp);
       const stamp = qualified ? Date.parse(body.timestamp) : NaN;
       const age = Date.now() - stamp;
       if (!Number.isFinite(stamp) || age < -30000 || age > 60000) continue;
@@ -180,7 +180,7 @@ export function metricEnvelope(probe, id = randomUUID()) {
     throw new Error("Invalid measured monitoring evidence");
   }
   const stamp = probe.observedAt;
-  if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/u.test(stamp) ||
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(stamp) ||
       Date.now() - Date.parse(stamp) > 120000 ||
       Date.parse(stamp) - Date.now() > 30000) {
     throw new Error("Monitoring evidence must be fresh and timezone-qualified");
@@ -266,4 +266,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exitCode = 1;
   });
 }
+
 

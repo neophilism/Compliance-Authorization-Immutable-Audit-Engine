@@ -28,6 +28,31 @@ test("production monitoring requires HTTPS origins with no embedded credentials"
   }
 });
 
+for (const offset of ["Z", "+00:00", "-00:00"]) {
+  test("accepts fresh qualified readiness and evidence timestamp " + offset, async () => {
+    const timestamp = new Date().toISOString().replace(/Z$/, offset);
+    const probe = await probeApi(ENV.CAIAE_MONITOR_API_URL, { count: 1,
+      fetchImpl: async () => json(ready({ timestamp })),
+    });
+    assert.equal(probe.success, 1);
+    const envelope = metricEnvelope({ ...probe, observedAt: timestamp });
+    assert.equal(envelope.records[0].value, 100);
+    assert.equal(envelope.records[0].observedAt, timestamp);
+  });
+}
+
+for (const endpoint of ["CAIAE_MONITOR_API_URL", "ENGINE_ROOM_BASE_URL"]) {
+  for (const host of ["[::1]", "[fc00::1]", "[fe80::1]", "[::ffff:127.0.0.1]", "[2001:db8::1]"]) {
+    test("rejects IPv6 " + endpoint + " before probes or signed delivery: " + host, async () => {
+      let requests = 0;
+      await assert.rejects(runMonitor({ env: { ...ENV, [endpoint]: "https://" + host },
+        fetchImpl: async () => { requests++; throw new Error("unexpected request"); },
+      }), /named public HTTPS service/);
+      assert.equal(requests, 0);
+    });
+  }
+}
+
 test("p95 uses observed samples, never a fabricated latency on outage", () => {
   assert.equal(p95([]), null);
   assert.equal(p95([10, 20, 30, 40, 50]), 50);
@@ -330,4 +355,5 @@ test("signed delivery authenticates the exact HTTP body and is not logged", asyn
     /HTTP 401/,
   );
 });
+
 

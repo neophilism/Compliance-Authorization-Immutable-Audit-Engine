@@ -53,3 +53,15 @@ Browser login/accessibility, real isolated restore, external audit anchors,
 worker replay/failover, network egress, alert delivery and measured reliability
 remain separate gates. Do not claim general security conformance, regulatory
 compliance, distributed worker exclusion or full project completion here.
+
+## November 1 regression repair
+
+Corrected overescaped regex literals that rejected fresh readiness/evidence
+timestamps and failed to recognize bracketed IPv6 addresses. Readiness samples
+and metric envelopes accept fresh UTC or explicitly offset timestamps while
+retaining stale, future and unqualified timestamp rejection. Both configured
+origins reject IPv6 literals before any probe or signed delivery.
+
+The isolated credential-free monitor suite passes 51 tests, including 13 new
+timestamp/origin regressions. Exact-head full CI and actual production acceptance
+remain separate requirements; these local fixtures establish neither.
