@@ -12,8 +12,9 @@ import { buildApp } from "../src/app.js";
 
 const BOOTSTRAP_SECRET =
   "api-bootstrap-secret-123456789";
+const RELEASE_SHA = "a".repeat(40);
 
-test("operator authentication, RBAC, organization isolation, and anti-impersonation are enforced", async () => {
+test("operator authentication, deployment acceptance, RBAC, organization isolation, and anti-impersonation are enforced", async () => {
   if (!process.env.DATABASE_URL) return;
 
   const pool = createPool();
@@ -100,6 +101,7 @@ test("operator authentication, RBAC, organization isolation, and anti-impersonat
 
   const app = await buildApp({
     securityMode: "enforce",
+    releaseSha: RELEASE_SHA,
     bootstrapSecret:
       BOOTSTRAP_SECRET,
   });
@@ -178,6 +180,35 @@ test("operator authentication, RBAC, organization isolation, and anti-impersonat
       me.json().principal.id,
       adminId,
     );
+
+    // Run the deployed checker against real Fastify handlers and the isolated
+    // test database, not a hand-invented identity/OpenAPI/certificate fixture.
+    // Variable URL import keeps the Node .mjs tool outside the API build tree.
+    const checkerUrl = new URL("../../../scripts/verify-deployment.mjs", import.meta.url);
+    const { verifyDeployment } = await import(checkerUrl.href);
+    const smokeOptions = {
+      baseUrl: "https://isolated-api.example",
+      operatorToken: adminToken,
+      expectedRelease: RELEASE_SHA,
+      expectedOrganizationId: organizationId,
+      requireAuth: true,
+      fetchImpl: async (raw: string, options: { headers: Record<string, string> }) => {
+        const url = new URL(raw);
+        const response = await app.inject({
+          method: "GET", url: url.pathname + url.search, headers: options.headers,
+        });
+        return new Response(response.body, {
+          status: response.statusCode,
+          headers: { "content-type": String(response.headers["content-type"]) },
+        });
+      },
+    };
+    assert.deepEqual(await verifyDeployment(smokeOptions), {
+      apiOrigin: smokeOptions.baseUrl, release: RELEASE_SHA, authenticated: true,
+    });
+    await assert.rejects(verifyDeployment({
+      ...smokeOptions, expectedOrganizationId: otherOrganizationId,
+    }), /expected organization/);
 
     const ownResource =
       await app.inject({
@@ -424,3 +455,4 @@ test("operator authentication, RBAC, organization isolation, and anti-impersonat
     await pool.end();
   }
 });
+
